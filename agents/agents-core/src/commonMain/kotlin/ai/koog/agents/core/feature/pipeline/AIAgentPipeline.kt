@@ -58,9 +58,6 @@ import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.streaming.StreamFrame
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
@@ -81,7 +78,7 @@ import kotlin.reflect.safeCast
  * through a flexible interception system. Features can be installed with custom configurations
  * and can hook into different stages of the agent's execution lifecycle.
  *
- * @param clock Clock instance for time-related operations
+ * @property clock Clock instance for time-related operations
  */
 public abstract class AIAgentPipeline(public val clock: Clock) {
 
@@ -105,8 +102,6 @@ public abstract class AIAgentPipeline(public val clock: Clock) {
         public val featureImpl: Any,
         public val featureConfig: FeatureConfig
     )
-
-    private val featurePrepareDispatcher = Dispatchers.Default.limitedParallelism(5)
 
     /**
      * Map of registered features and their configurations.
@@ -145,15 +140,11 @@ public abstract class AIAgentPipeline(public val clock: Clock) {
     protected val llmStreamingEventHandlers: MutableMap<AIAgentStorageKey<*>, LLMStreamingEventHandler> = mutableMapOf()
 
     internal suspend fun prepareFeatures() {
-        withContext(featurePrepareDispatcher) {
-            registeredFeatures.values.map { it.featureConfig }.forEach { featureConfig ->
-                featureConfig.messageProcessors.map { processor ->
-                    launch {
-                        logger.debug { "Start preparing processor: ${processor::class.simpleName}" }
-                        processor.initialize()
-                        logger.debug { "Finished preparing processor: ${processor::class.simpleName}" }
-                    }
-                }
+        registeredFeatures.values.map { it.featureConfig }.forEach { featureConfig ->
+            featureConfig.messageProcessors.map { processor ->
+                logger.debug { "Start preparing processor: ${processor::class.simpleName}" }
+                processor.initialize()
+                logger.debug { "Finished preparing processor: ${processor::class.simpleName}" }
             }
         }
     }
