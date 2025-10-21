@@ -35,9 +35,9 @@ import ai.koog.agents.features.tracing.mock.userMessage
 import ai.koog.agents.features.tracing.traceString
 import ai.koog.agents.testing.tools.DummyTool
 import ai.koog.agents.testing.tools.getMockExecutor
-import ai.koog.agents.testing.tools.mockLLMAnswer
 import ai.koog.prompt.dsl.Prompt
 import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.llm.toModelInfo
 import ai.koog.utils.io.use
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Sink
@@ -165,14 +165,14 @@ class TraceFeatureMessageFileWriterTest {
                             content = userPrompt
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, tools: [${dummyTool.name}])",
+                }, model: ${testModel.toModelInfo().eventString}, tools: [${dummyTool.name}])",
                 "${LLMCallCompletedEvent::class.simpleName} (run id: $runId, prompt: ${
                     expectedPrompt.copy(
                         messages = expectedPrompt.messages + userMessage(
                             content = userPrompt
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, responses: [{role: Tool, message: {\"dummy\":\"test\"}}])",
+                }, model: ${testModel.toModelInfo().eventString}, responses: [{role: Tool, message: {\"dummy\":\"test\"}}])",
                 "${NodeExecutionCompletedEvent::class.simpleName} (run id: $runId, node: test-llm-call, input: $userPrompt, output: ${
                     toolCallMessage(
                         dummyTool.name,
@@ -214,7 +214,7 @@ class TraceFeatureMessageFileWriterTest {
                             ).toMessage(clock = testClock)
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, tools: [${dummyTool.name}])",
+                }, model: ${testModel.toModelInfo().eventString}, tools: [${dummyTool.name}])",
                 "${LLMCallCompletedEvent::class.simpleName} (run id: $runId, prompt: ${
                     expectedPrompt.copy(
                         messages = expectedPrompt.messages + listOf(
@@ -477,14 +477,14 @@ class TraceFeatureMessageFileWriterTest {
                             content = userPrompt
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, tools: [${dummyTool.name}])",
+                }, model: ${testModel.toModelInfo().eventString}, tools: [${dummyTool.name}])",
                 "${LLMCallCompletedEvent::class.simpleName} (run id: $runId, prompt: ${
                     expectedPrompt.copy(
                         messages = expectedPrompt.messages + userMessage(
                             content = userPrompt
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, responses: [{role: Tool, message: {\"dummy\":\"test\"}}])",
+                }, model: ${testModel.toModelInfo().eventString}, responses: [{role: Tool, message: {\"dummy\":\"test\"}}])",
                 "${LLMCallStartingEvent::class.simpleName} (run id: $runId, prompt: ${
                     expectedPrompt.copy(
                         messages = expectedPrompt.messages + listOf(
@@ -498,7 +498,7 @@ class TraceFeatureMessageFileWriterTest {
                             ).toMessage(clock = testClock)
                         )
                     ).traceString
-                }, model: ${testModel.eventString}, tools: [${dummyTool.name}])",
+                }, model: ${testModel.toModelInfo().eventString}, tools: [${dummyTool.name}])",
                 "${LLMCallCompletedEvent::class.simpleName} (run id: $runId, prompt: ${
                     expectedPrompt.copy(
                         messages = expectedPrompt.messages + listOf(

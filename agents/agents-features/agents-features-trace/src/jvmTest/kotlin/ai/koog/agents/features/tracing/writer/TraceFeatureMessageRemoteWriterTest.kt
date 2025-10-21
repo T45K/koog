@@ -25,8 +25,8 @@ import ai.koog.agents.core.feature.model.events.ToolCallStartingEvent
 import ai.koog.agents.core.feature.remote.client.FeatureMessageRemoteClient
 import ai.koog.agents.core.feature.remote.client.config.DefaultClientConnectionConfig
 import ai.koog.agents.core.feature.remote.server.config.DefaultServerConnectionConfig
+import ai.koog.agents.core.feature.writer.FeatureMessageRemoteWriter
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.features.tracing.eventString
 import ai.koog.agents.features.tracing.feature.Tracing
 import ai.koog.agents.features.tracing.mock.MockLLMProvider
 import ai.koog.agents.features.tracing.mock.TestFeatureMessageWriter
@@ -40,21 +40,26 @@ import ai.koog.agents.features.tracing.mock.userMessage
 import ai.koog.agents.testing.network.NetUtil.findAvailablePort
 import ai.koog.agents.testing.tools.DummyTool
 import ai.koog.agents.testing.tools.getMockExecutor
-import ai.koog.agents.testing.tools.mockLLMAnswer
 import ai.koog.prompt.dsl.Prompt
 import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.llm.toModelInfo
 import ai.koog.utils.io.use
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.plugins.sse.SSEClientException
 import io.ktor.http.URLProtocol
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -63,12 +68,26 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
+@Execution(ExecutionMode.SAME_THREAD)
 class TraceFeatureMessageRemoteWriterTest {
 
     companion object {
         private val logger = KotlinLogging.logger { }
         private val defaultClientServerTimeout = 30.seconds
         private const val HOST = "127.0.0.1"
+    }
+
+    private fun CoroutineScope.signalServerStarted(
+        writer: FeatureMessageRemoteWriter,
+        signal: CompletableDeferred<Boolean>,
+    ): Job = launch {
+        val isStarted = withTimeoutOrNull(defaultClientServerTimeout) {
+            writer.isOpen.first { it }
+        } ?: throw AssertionError("Server did not start in time")
+
+        if (!signal.isCompleted) {
+            signal.complete(isStarted)
+        }
     }
 
     @Test
@@ -93,6 +112,8 @@ class TraceFeatureMessageRemoteWriterTest {
         val serverJob = launch {
             TraceFeatureMessageRemoteWriter(connectionConfig = serverConfig).use { writer ->
 
+                val serverReadyJob = signalServerStarted(writer, isServerStarted)
+
                 val strategy = strategy<String, String>("tracing-test-strategy") {
                     val llmCallNode by nodeLLMRequest("test LLM call")
                     val llmCallWithToolsNode by nodeLLMRequest("test LLM call with tools")
@@ -102,14 +123,17 @@ class TraceFeatureMessageRemoteWriterTest {
                     edge(llmCallWithToolsNode forwardTo nodeFinish transformed { "Done" })
                 }
 
-                createAgent(strategy = strategy) {
-                    install(Tracing) {
-                        addMessageProcessor(writer)
+                try {
+                    createAgent(strategy = strategy) {
+                        install(Tracing) {
+                            addMessageProcessor(writer)
+                        }
+                    }.use { agent ->
+                        agent.run("")
+                        isClientFinished.await()
                     }
-                }.use { agent ->
-                    agent.run("")
-                    isServerStarted.complete(true)
-                    isClientFinished.await()
+                } finally {
+                    serverReadyJob.join()
                 }
             }
         }
@@ -188,6 +212,8 @@ class TraceFeatureMessageRemoteWriterTest {
         val serverJob = launch {
             TraceFeatureMessageRemoteWriter(connectionConfig = serverConfig).use { writer ->
 
+                val serverReadyJob = signalServerStarted(writer, isServerStarted)
+
                 val strategy = strategy(strategyName) {
                     val nodeSendInput by nodeLLMRequest("test-llm-call")
                     val nodeExecuteTool by nodeExecuteTool("test-tool-call")
@@ -207,24 +233,27 @@ class TraceFeatureMessageRemoteWriterTest {
                     mockLLMAnswer(mockResponse) onRequestContains dummyTool.result
                 }
 
-                createAgent(
-                    agentId = agentId,
-                    strategy = strategy,
-                    promptId = promptId,
-                    model = testModel,
-                    userPrompt = userPrompt,
-                    systemPrompt = systemPrompt,
-                    assistantPrompt = assistantPrompt,
-                    toolRegistry = toolRegistry,
-                    promptExecutor = mockExecutor
-                ) {
-                    install(Tracing) {
-                        addMessageProcessor(writer)
+                try {
+                    createAgent(
+                        agentId = agentId,
+                        strategy = strategy,
+                        promptId = promptId,
+                        model = testModel,
+                        userPrompt = userPrompt,
+                        systemPrompt = systemPrompt,
+                        assistantPrompt = assistantPrompt,
+                        toolRegistry = toolRegistry,
+                        promptExecutor = mockExecutor
+                    ) {
+                        install(Tracing) {
+                            addMessageProcessor(writer)
+                        }
+                    }.use { agent ->
+                        agent.run(userPrompt)
+                        isClientFinished.await()
                     }
-                }.use { agent ->
-                    agent.run(userPrompt)
-                    isServerStarted.complete(true)
-                    isClientFinished.await()
+                } finally {
+                    serverReadyJob.join()
                 }
             }
         }
@@ -323,14 +352,14 @@ class TraceFeatureMessageRemoteWriterTest {
                     LLMCallStartingEvent(
                         runId = runId,
                         prompt = expectedLLMCallPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         tools = listOf(dummyTool.name),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
                     LLMCallCompletedEvent(
                         runId = runId,
                         prompt = expectedLLMCallPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         responses = listOf(toolCallMessage(dummyTool.name, content = """{"dummy":"test"}""")),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
@@ -378,14 +407,14 @@ class TraceFeatureMessageRemoteWriterTest {
                     LLMCallStartingEvent(
                         runId = runId,
                         prompt = expectedLLMCallWithToolsPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         tools = listOf(dummyTool.name),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
                     LLMCallCompletedEvent(
                         runId = runId,
                         prompt = expectedLLMCallWithToolsPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         responses = listOf(assistantMessage(mockResponse)),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
@@ -588,6 +617,8 @@ class TraceFeatureMessageRemoteWriterTest {
         val serverJob = launch {
             TraceFeatureMessageRemoteWriter(connectionConfig = serverConfig).use { writer ->
 
+                val serverReadyJob = signalServerStarted(writer, isServerStarted)
+
                 val strategy = strategy(strategyName) {
                     val nodeSendInput by nodeLLMRequest("test-llm-call")
                     val nodeExecuteTool by nodeExecuteTool("test-tool-call")
@@ -607,27 +638,30 @@ class TraceFeatureMessageRemoteWriterTest {
                     mockLLMAnswer(mockResponse) onRequestContains dummyTool.result
                 }
 
-                createAgent(
-                    agentId = agentId,
-                    strategy = strategy,
-                    promptId = promptId,
-                    model = testModel,
-                    userPrompt = userPrompt,
-                    systemPrompt = systemPrompt,
-                    assistantPrompt = assistantPrompt,
-                    toolRegistry = toolRegistry,
-                    promptExecutor = mockExecutor
-                ) {
-                    install(Tracing) {
-                        writer.setMessageFilter { message ->
-                            message is LLMCallStartingEvent || message is LLMCallCompletedEvent
+                try {
+                    createAgent(
+                        agentId = agentId,
+                        strategy = strategy,
+                        promptId = promptId,
+                        model = testModel,
+                        userPrompt = userPrompt,
+                        systemPrompt = systemPrompt,
+                        assistantPrompt = assistantPrompt,
+                        toolRegistry = toolRegistry,
+                        promptExecutor = mockExecutor
+                    ) {
+                        install(Tracing) {
+                            writer.setMessageFilter { message ->
+                                message is LLMCallStartingEvent || message is LLMCallCompletedEvent
+                            }
+                            addMessageProcessor(writer)
                         }
-                        addMessageProcessor(writer)
+                    }.use { agent ->
+                        agent.run(userPrompt)
+                        isClientFinished.await()
                     }
-                }.use { agent ->
-                    agent.run(userPrompt)
-                    isServerStarted.complete(true)
-                    isClientFinished.await()
+                } finally {
+                    serverReadyJob.join()
                 }
             }
         }
@@ -664,28 +698,28 @@ class TraceFeatureMessageRemoteWriterTest {
                     LLMCallStartingEvent(
                         runId = runId,
                         prompt = expectedLLMCallPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         tools = listOf(dummyTool.name),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
                     LLMCallCompletedEvent(
                         runId = runId,
                         prompt = expectedLLMCallPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         responses = listOf(toolCallMessage(dummyTool.name, content = """{"dummy":"test"}""")),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
                     LLMCallStartingEvent(
                         runId = runId,
                         prompt = expectedLLMCallWithToolsPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         tools = listOf(dummyTool.name),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
                     LLMCallCompletedEvent(
                         runId = runId,
                         prompt = expectedLLMCallWithToolsPrompt,
-                        model = testModel.eventString,
+                        model = testModel.toModelInfo(),
                         responses = listOf(assistantMessage(mockResponse)),
                         timestamp = testClock.now().toEpochMilliseconds()
                     ),
