@@ -6,29 +6,27 @@ import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.ext.tool.file.EditFileTool
 import ai.koog.agents.ext.tool.file.ListDirectoryTool
 import ai.koog.agents.ext.tool.file.ReadFileTool
-import ai.koog.agents.ext.tool.file.WriteFileTool
 import ai.koog.agents.features.eventHandler.feature.handleEvents
-import ai.koog.prompt.executor.clients.anthropic.AnthropicModels
-import ai.koog.prompt.executor.llms.all.simpleAnthropicExecutor
+import ai.koog.prompt.executor.clients.openai.OpenAIModels
 import ai.koog.prompt.executor.llms.all.simpleOpenAIExecutor
 import ai.koog.rag.base.files.JVMFileSystemProvider
 import kotlinx.coroutines.runBlocking
 
 val agent = AIAgent(
-    promptExecutor = simpleAnthropicExecutor(System.getenv("ANTHROPIC_API_KEY")),
+    promptExecutor = simpleOpenAIExecutor(System.getenv("OPENAI_API_KEY")),
     strategy = singleRunStrategy(),
     systemPrompt = """
         You are a highly skilled programmer tasked with updating the provided codebase according to the given task.
         Your goal is to deliver production-ready code changes that integrate seamlessly with the existing codebase and solve given task.
+        Ensure minimal possible changes done - that guarantees minimal impact on existing functionality.
     """.trimIndent(),
-    llmModel = AnthropicModels.Sonnet_4_5,
+    llmModel = OpenAIModels.Chat.GPT5Codex,
     toolRegistry = ToolRegistry {
         tool(ListDirectoryTool(JVMFileSystemProvider.ReadOnly))
         tool(ReadFileTool(JVMFileSystemProvider.ReadOnly))
-        tool(WriteFileTool(JVMFileSystemProvider.ReadWrite))
         tool(EditFileTool(JVMFileSystemProvider.ReadWrite))
     },
-    maxIterations = 100
+    maxIterations = 400
 ) {
     handleEvents {
         onToolCallStarting { ctx ->
@@ -45,7 +43,7 @@ fun main(args: Array<String>) = runBlocking {
     }
 
     val (path, task) = args
-    val input = "Project path: $path\n\n$task"
+    val input = "Project absolute path: $path\n\n## Task\n$task"
     val result = agent.run(input)
     println(result)
 }
