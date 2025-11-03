@@ -1,6 +1,7 @@
 package ai.koog.agents.core.agent.entity
 
 import ai.koog.agents.core.agent.context.AIAgentContext
+import ai.koog.agents.core.agent.context.AIAgentGraphContext
 import ai.koog.agents.core.agent.context.AIAgentGraphContextBase
 import ai.koog.agents.core.agent.context.DetachedPromptExecutorAPI
 import ai.koog.agents.core.agent.context.getAgentContextData
@@ -20,6 +21,7 @@ import ai.koog.prompt.structure.StructuredOutputConfig
 import ai.koog.prompt.structure.json.JsonStructuredData
 import ai.koog.prompt.structure.json.generator.StandardJsonSchemaGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.util.caseInsensitiveMap
 import kotlinx.serialization.Serializable
 import kotlin.reflect.KType
 
@@ -164,8 +166,19 @@ public open class AIAgentSubgraph<TInput, TOutput>(
             )
         }
 
+        runInNonRootContext(context) {
+            pipeline.onSubgraphExecutionStarting(this@AIAgentSubgraph, innerContext, input, inputType)
+        }
+
         // Execute the subgraph with an inner context and get the result and updated prompt.
-        val result = executeWithInnerContext(innerContext, input)
+        val result = try {
+            executeWithInnerContext(innerContext, input)
+        } catch (t: Throwable) {
+            runInNonRootContext(context) {
+                pipeline.onSubgraphExecutionFailed(this@AIAgentSubgraph, context, input, inputType, t)
+            }
+            throw t
+        }
 
         // Restore original LLM params on the new prompt.
         val newPrompt = innerContext.llm.readSession {
@@ -177,6 +190,10 @@ public open class AIAgentSubgraph<TInput, TOutput>(
 
         if (innerForcedData != null) {
             context.store(innerForcedData)
+        }
+
+        runInNonRootContext(context) {
+            pipeline.onSubgraphExecutionCompleted(this@AIAgentSubgraph, innerContext, input, inputType, result, outputType)
         }
 
         return result
@@ -254,6 +271,17 @@ public open class AIAgentSubgraph<TInput, TOutput>(
             throw IllegalStateException("${FinishNode::class.simpleName} should always return String")
         }
         return result
+    }
+
+    /**
+     * Executes the specified action within a non-root context of the agent's graph structure.
+     * This method ensures that the action is only executed if the provided context has a parent context,
+     * effectively skipping execution for root contexts.
+     */
+    @OptIn(InternalAgentsApi::class)
+    private suspend fun runInNonRootContext (context: AIAgentGraphContextBase, action: suspend AIAgentGraphContextBase.() -> Unit) {
+        if (context.parentContext == null) return
+        action(context)
     }
 
     private fun formatLog(context: AIAgentContext, message: String): String =

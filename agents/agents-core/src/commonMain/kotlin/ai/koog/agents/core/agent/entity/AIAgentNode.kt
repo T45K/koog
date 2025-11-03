@@ -167,7 +167,7 @@ public open class AIAgentNode<TInput, TOutput> internal constructor(
                     throw t
                 }
 
-            context.pipeline.onNodeExecutionCompleted(this@AIAgentNode, context, input, output, inputType, outputType)
+            context.pipeline.onNodeExecutionCompleted(this@AIAgentNode, context, input, inputType, output, outputType)
             output
         }
 }

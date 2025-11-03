@@ -4,7 +4,6 @@ import ai.koog.agents.core.agent.context.element.getAgentRunInfoElement
 import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.entity.AIAgentStorageKey
 import ai.koog.agents.core.annotation.InternalAgentsApi
-import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.feature.AIAgentGraphFeature
 import ai.koog.agents.core.feature.pipeline.AIAgentGraphPipeline
 import ai.koog.agents.core.utils.SerializationUtils
@@ -28,6 +27,7 @@ import ai.koog.agents.utils.HiddenString
 import ai.koog.prompt.message.Message
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.api.trace.StatusCode
+import kotlinx.serialization.json.JsonElement
 import kotlin.reflect.KType
 
 /**
@@ -193,7 +193,7 @@ public class OpenTelemetry {
                     parent = invokeAgentSpan,
                     runId = eventContext.context.runId,
                     nodeName = eventContext.node.name,
-                    nodeInput = getNodeData(eventContext.input, eventContext.inputType)
+                    nodeInput = nodeDataToString(eventContext.input, eventContext.inputType)
                 )
 
                 spanAdapter?.onBeforeSpanStarted(nodeExecuteSpan)
@@ -212,16 +212,18 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = eventContext.node.name,
+                    nodeInput = nodeDataToString(eventContext.input, eventContext.inputType)
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
                     ?: return@interceptNodeExecutionCompleted
 
-                val attributesToAdd = buildList {
-                    getNodeData(eventContext.output, eventContext.outputType)?.let { outputString ->
-                        add(CustomAttribute("koog.node.output", HiddenString(outputString)))
-                    }
-                }
+                val attributesToAdd = listOf(
+                    CustomAttribute(
+                        key = "koog.node.output",
+                        value = HiddenString(nodeDataToString(eventContext.output, eventContext.outputType))
+                    )
+                )
 
                 nodeExecuteSpan.addAttributes(attributesToAdd)
 
@@ -241,6 +243,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = eventContext.node.name,
+                    nodeInput = nodeDataToString(eventContext.input, eventContext.inputType)
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
@@ -271,6 +274,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType)
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
@@ -280,14 +284,13 @@ public class OpenTelemetry {
                 val runId = eventContext.runId
                 val model = eventContext.model
                 val temperature = eventContext.prompt.params.temperature ?: 0.0
-                val promptId = eventContext.prompt.id
 
                 val inferenceSpan = InferenceSpan(
                     provider = provider,
                     parent = nodeExecuteSpan,
                     runId = runId,
+                    content = eventContext.prompt.messages.lastOrNull()?.content ?: "",
                     model = model,
-                    promptId = promptId,
                     temperature = temperature,
                     maxTokens = eventContext.prompt.params.maxTokens,
                 )
@@ -342,7 +345,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
-                    promptId = eventContext.prompt.id
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType)
                 )
 
                 val inferenceSpan = spanProcessor.getSpanCatching<InferenceSpan>(inferenceSpanId)
@@ -427,7 +430,8 @@ public class OpenTelemetry {
                 val nodeExecutionSpanId = NodeExecuteSpan.createId(
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
-                    nodeName = nodeInfoElement.nodeName
+                    nodeName = nodeInfoElement.nodeName,
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType)
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecutionSpanId)
@@ -458,6 +462,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType),
                     toolName = eventContext.tool.name,
                 )
 
@@ -493,6 +498,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType),
                     toolName = eventContext.tool.name
                 )
 
@@ -525,6 +531,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType),
                     toolName = eventContext.tool.name
                 )
 
@@ -552,21 +559,18 @@ public class OpenTelemetry {
 
         /**
          * Retrieves the JSON representation of the given data based on its type.
-         *
-         * Note: See [KG-485](https://youtrack.jetbrains.com/issue/KG-485)
-         *       Workaround for processing non-serializable [ReceivedToolResult] type in the node input/output.
          */
-        private fun getNodeData(data: Any?, dataType: KType): String? {
-            data ?: return null
+        @OptIn(InternalAgentsApi::class)
+        private fun nodeDataToJsonElement(data: Any?, dataType: KType): JsonElement =
+            SerializationUtils.encodeDataToJsonElementOrDefault(data, dataType)
 
-            @OptIn(InternalAgentsApi::class)
-            return SerializationUtils.encodeDataToStringOrDefault(data, dataType) {
-                when (data) {
-                    is ReceivedToolResult -> data.content
-                    else -> data.toString()
-                }
-            }
-        }
+        /**
+         * Retrieves the String representation of the given data based on its type.
+         */
+        @OptIn(InternalAgentsApi::class)
+        private fun nodeDataToString(data: Any?, dataType: KType): String =
+            SerializationUtils.encodeDataToStringOrDefault(data, dataType)
+
 
         //endregion Private Methods
     }

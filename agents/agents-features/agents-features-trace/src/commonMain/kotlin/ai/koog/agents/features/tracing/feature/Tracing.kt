@@ -3,7 +3,6 @@ package ai.koog.agents.features.tracing.feature
 import ai.koog.agents.core.agent.entity.AIAgentGraphStrategy
 import ai.koog.agents.core.agent.entity.AIAgentStorageKey
 import ai.koog.agents.core.annotation.InternalAgentsApi
-import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.feature.AIAgentGraphFeature
 import ai.koog.agents.core.feature.message.FeatureMessage
 import ai.koog.agents.core.feature.message.FeatureMessageProcessorUtil.onMessageForEachCatching
@@ -22,6 +21,9 @@ import ai.koog.agents.core.feature.model.events.NodeExecutionCompletedEvent
 import ai.koog.agents.core.feature.model.events.NodeExecutionFailedEvent
 import ai.koog.agents.core.feature.model.events.NodeExecutionStartingEvent
 import ai.koog.agents.core.feature.model.events.StrategyCompletedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionCompletedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionFailedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionStartingEvent
 import ai.koog.agents.core.feature.model.events.ToolCallCompletedEvent
 import ai.koog.agents.core.feature.model.events.ToolCallFailedEvent
 import ai.koog.agents.core.feature.model.events.ToolCallStartingEvent
@@ -30,11 +32,10 @@ import ai.koog.agents.core.feature.model.events.startNodeToGraph
 import ai.koog.agents.core.feature.model.toAgentError
 import ai.koog.agents.core.feature.pipeline.AIAgentGraphPipeline
 import ai.koog.agents.core.tools.Tool
-import ai.koog.agents.core.utils.SerializationUtils
+import ai.koog.agents.core.utils.SerializationUtils.encodeDataToJsonElementOrDefault
 import ai.koog.prompt.llm.toModelInfo
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.reflect.KType
 
 /**
@@ -192,7 +193,7 @@ public class Tracing {
                 val event = NodeExecutionStartingEvent(
                     runId = eventContext.context.runId,
                     nodeName = eventContext.node.name,
-                    input = getNodeData(eventContext.input, eventContext.inputType),
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
                     timestamp = pipeline.clock.now().toEpochMilliseconds()
                 )
                 processMessage(config, event)
@@ -202,8 +203,8 @@ public class Tracing {
                 val event = NodeExecutionCompletedEvent(
                     runId = eventContext.context.runId,
                     nodeName = eventContext.node.name,
-                    input = getNodeData(eventContext.input, eventContext.inputType),
-                    output = getNodeData(eventContext.output, eventContext.outputType),
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
+                    output = nodeDataToJsonElement(eventContext.output, eventContext.outputType),
                     timestamp = pipeline.clock.now().toEpochMilliseconds()
                 )
                 processMessage(config, event)
@@ -213,7 +214,7 @@ public class Tracing {
                 val event = NodeExecutionFailedEvent(
                     runId = eventContext.context.runId,
                     nodeName = eventContext.node.name,
-                    input = getNodeData(eventContext.input, eventContext.inputType),
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
                     error = eventContext.throwable.toAgentError(),
                     timestamp = pipeline.clock.now().toEpochMilliseconds()
                 )
@@ -221,6 +222,42 @@ public class Tracing {
             }
 
             //endregion Intercept Node Events
+
+            //region Intercept Subgraph Events
+
+            pipeline.interceptSubgraphExecutionStarting(this) intercept@{ eventContext ->
+                val event = SubgraphExecutionStartingEvent(
+                    runId = eventContext.context.runId,
+                    subgraphName = eventContext.subgraph.name,
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
+                    timestamp = pipeline.clock.now().toEpochMilliseconds()
+                )
+                processMessage(config, event)
+            }
+
+            pipeline.interceptSubgraphExecutionCompleted(this) intercept@{ eventContext ->
+                val event = SubgraphExecutionCompletedEvent(
+                    runId = eventContext.context.runId,
+                    subgraphName = eventContext.subgraph.name,
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
+                    output = nodeDataToJsonElement(eventContext.output, eventContext.outputType),
+                    timestamp = pipeline.clock.now().toEpochMilliseconds()
+                )
+                processMessage(config, event)
+            }
+
+            pipeline.interceptSubgraphExecutionFailed(this) intercept@{ eventContext ->
+                val event = SubgraphExecutionFailedEvent(
+                    runId = eventContext.context.runId,
+                    subgraphName = eventContext.subgraph.name,
+                    input = nodeDataToJsonElement(eventContext.input, eventContext.inputType),
+                    error = eventContext.throwable.toAgentError(),
+                    timestamp = pipeline.clock.now().toEpochMilliseconds()
+                )
+                processMessage(config, event)
+            }
+
+            //endregion Intercept Subgraph Events
 
             //region Intercept LLM Call Events
 
@@ -371,21 +408,10 @@ public class Tracing {
 
         /**
          * Retrieves the JSON representation of the given data based on its type.
-         *
-         * Note: See [KG-485](https://youtrack.jetbrains.com/issue/KG-485)
-         *       Workaround for processing non-serializable [ReceivedToolResult] type in the node input/output.
          */
-        private fun getNodeData(data: Any?, dataType: KType): JsonElement? {
-            data ?: return null
-
-            @OptIn(InternalAgentsApi::class)
-            return SerializationUtils.encodeDataToJsonElementOrDefault(data, dataType) {
-                when (data) {
-                    is ReceivedToolResult -> SerializationUtils.parseDataToJsonElementOrDefault(data.content)
-                    else -> JsonPrimitive(data.toString())
-                }
-            }
-        }
+        @OptIn(InternalAgentsApi::class)
+        private fun nodeDataToJsonElement(data: Any?, dataType: KType): JsonElement =
+            encodeDataToJsonElementOrDefault(data, dataType)
 
         //endregion Private Methods
     }

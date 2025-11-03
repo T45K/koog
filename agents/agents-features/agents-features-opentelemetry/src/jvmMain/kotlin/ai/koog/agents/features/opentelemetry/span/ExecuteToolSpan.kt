@@ -15,8 +15,8 @@ internal class ExecuteToolSpan(
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeName: String, toolName: String): String =
-            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName), toolName = toolName)
+        fun createId(agentId: String, runId: String, nodeName: String, nodeInput: String, toolName: String): String =
+            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName, nodeInput), toolName = toolName)
 
         private fun createIdFromParent(parentId: String, toolName: String): String =
             "$parentId.tool.$toolName"

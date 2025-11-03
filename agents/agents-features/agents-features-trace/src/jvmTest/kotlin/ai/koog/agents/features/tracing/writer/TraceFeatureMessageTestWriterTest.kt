@@ -14,10 +14,14 @@ import ai.koog.agents.core.feature.model.events.LLMStreamingFailedEvent
 import ai.koog.agents.core.feature.model.events.LLMStreamingFrameReceivedEvent
 import ai.koog.agents.core.feature.model.events.LLMStreamingStartingEvent
 import ai.koog.agents.core.feature.model.events.NodeExecutionFailedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionCompletedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionFailedEvent
+import ai.koog.agents.core.feature.model.events.SubgraphExecutionStartingEvent
 import ai.koog.agents.core.feature.model.events.ToolCallCompletedEvent
 import ai.koog.agents.core.feature.model.events.ToolCallStartingEvent
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.utils.SerializationUtils
+import ai.koog.agents.ext.agent.subgraphWithTask
 import ai.koog.agents.features.tracing.feature.Tracing
 import ai.koog.agents.features.tracing.mock.RecursiveTool
 import ai.koog.agents.features.tracing.mock.TestFeatureMessageWriter
@@ -28,6 +32,7 @@ import ai.koog.agents.features.tracing.mock.systemMessage
 import ai.koog.agents.features.tracing.mock.testClock
 import ai.koog.agents.features.tracing.mock.userMessage
 import ai.koog.agents.testing.tools.DummyTool
+import ai.koog.agents.testing.tools.TestFinishTool
 import ai.koog.agents.testing.tools.getMockExecutor
 import ai.koog.prompt.dsl.Prompt
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
@@ -35,8 +40,10 @@ import ai.koog.prompt.executor.model.PromptExecutor
 import ai.koog.prompt.llm.toModelInfo
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.message.ResponseMetaInfo
+import ai.koog.prompt.params.LLMParams
 import ai.koog.prompt.streaming.StreamFrame
 import ai.koog.utils.io.use
+import io.ktor.util.rootCause
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -516,6 +523,179 @@ class TraceFeatureMessageTestWriterTest {
                 assertEquals(expectedEvents.size, actualEvents.size)
                 assertContentEquals(expectedEvents, actualEvents)
             }
+        }
+    }
+
+    @Test
+    fun `test subgraph execution events success`() = runBlocking {
+        val model = OpenAIModels.Chat.GPT4o
+        val llmParams = LLMParams()
+
+        val strategyName = "test-strategy"
+        val subgraphName = "test-subgraph"
+        val inputRequest = "Test input"
+
+        val mockExecutor = getMockExecutor {
+            mockLLMToolCall(TestFinishTool, TestFinishTool.Args()) onRequestEquals inputRequest
+        }
+
+        val strategy = strategy<String, String>(strategyName) {
+            val testSubgraphWithTask by subgraphWithTask<String, TestFinishTool.Args, String>(
+                tools = emptyList(),
+                finishTool = TestFinishTool,
+                name = subgraphName,
+                llmModel = model,
+                llmParams = llmParams,
+            ) { input -> input }
+
+            nodeStart then testSubgraphWithTask then nodeFinish
+        }
+
+        TestFeatureMessageWriter().use { writer ->
+            val agentOutput = createAgent(
+                strategy = strategy,
+                promptExecutor = mockExecutor,
+            ) {
+                install(Tracing) {
+                    addMessageProcessor(writer)
+                }
+            }.use { agent ->
+                agent.run(inputRequest)
+            }
+
+            val actualEvents = writer.messages.filter { event ->
+                event is SubgraphExecutionStartingEvent ||
+                    event is SubgraphExecutionCompletedEvent ||
+                    event is SubgraphExecutionFailedEvent
+            }
+
+            val runIdFromEvents = (actualEvents.first() as SubgraphExecutionStartingEvent).runId
+
+            val expectedInput = @OptIn(InternalAgentsApi::class)
+            SerializationUtils.encodeDataToJsonElementOrNull(
+                data = inputRequest,
+                dataType = typeOf<String>()
+            )
+
+            val expectedOutput = @OptIn(InternalAgentsApi::class)
+            SerializationUtils.encodeDataToJsonElementOrNull(
+                data = agentOutput,
+                dataType = typeOf<String>()
+            )
+
+            val expectedEvents = listOf(
+                SubgraphExecutionStartingEvent(
+                    runId = runIdFromEvents,
+                    subgraphName = subgraphName,
+                    input = expectedInput,
+                    timestamp = testClock.now().toEpochMilliseconds()
+                ),
+                SubgraphExecutionCompletedEvent(
+                    runId = runIdFromEvents,
+                    subgraphName = subgraphName,
+                    input = expectedInput,
+                    output = expectedOutput,
+                    timestamp = testClock.now().toEpochMilliseconds()
+                ),
+            )
+
+            assertEquals(expectedEvents.size, actualEvents.size)
+            assertContentEquals(expectedEvents, actualEvents)
+        }
+    }
+
+    @Test
+    fun `test subgraph execution events failure`() = runBlocking {
+        val model = OpenAIModels.Chat.GPT4o
+        val llmParams = LLMParams()
+
+        val strategyName = "test-strategy"
+        val subgraphName = "test-subgraph"
+        val inputRequest = "Test input"
+        val testAssistantResponse = "Test assistant response"
+
+        val mockExecutor = getMockExecutor {
+            mockLLMAnswer(testAssistantResponse) onRequestEquals inputRequest
+        }
+
+        val strategy = strategy<String, String>(strategyName) {
+            val testSubgraphWithTask by subgraphWithTask<String, TestFinishTool.Args, String>(
+                tools = emptyList(),
+                finishTool = TestFinishTool,
+                name = subgraphName,
+                llmModel = model,
+                llmParams = llmParams,
+            ) { input -> input }
+
+            nodeStart then testSubgraphWithTask then nodeFinish
+        }
+
+        TestFeatureMessageWriter().use { writer ->
+            var expectedStackTrace = ""
+            var expectedCause = ""
+
+            val agentThrowable = createAgent(
+                strategy = strategy,
+                promptExecutor = mockExecutor,
+            ) {
+                install(Tracing) {
+                    addMessageProcessor(writer)
+                }
+            }.use { agent ->
+                assertFails {
+                    try {
+                        agent.run(inputRequest)
+                    } catch (t: Throwable) {
+                        expectedStackTrace = t.stackTraceToString()
+                        expectedCause = t.cause?.stackTraceToString() ?: ""
+                        throw t
+                    }
+                }
+            }
+
+            val expectedAgentErrorMessage =
+                "Subgraph with task must always call tools, but no ${Message.Tool.Call::class.simpleName} was generated, " +
+                    "got instead: ${Message.Assistant::class.simpleName}"
+
+            // Ensure the error message is as expected
+            assertEquals(expectedAgentErrorMessage, agentThrowable.message)
+
+            val actualEvents = writer.messages.filter { event ->
+                event is SubgraphExecutionStartingEvent ||
+                    event is SubgraphExecutionCompletedEvent ||
+                    event is SubgraphExecutionFailedEvent
+            }
+
+            val runIdFromEvents = (actualEvents.first() as SubgraphExecutionStartingEvent).runId
+
+            val expectedInput = @OptIn(InternalAgentsApi::class)
+            SerializationUtils.encodeDataToJsonElementOrNull(
+                data = inputRequest,
+                dataType = typeOf<String>()
+            )
+
+            val expectedEvents = listOf(
+                SubgraphExecutionStartingEvent(
+                    runId = runIdFromEvents,
+                    subgraphName = subgraphName,
+                    input = expectedInput,
+                    timestamp = testClock.now().toEpochMilliseconds()
+                ),
+                SubgraphExecutionFailedEvent(
+                    runId = runIdFromEvents,
+                    subgraphName = subgraphName,
+                    input = expectedInput,
+                    error = AIAgentError(
+                        message = expectedAgentErrorMessage,
+                        stackTrace = expectedStackTrace,
+                        cause = expectedCause,
+                    ),
+                    timestamp = testClock.now().toEpochMilliseconds()
+                )
+            )
+
+            assertEquals(expectedEvents.size, actualEvents.size)
+            assertContentEquals(expectedEvents, actualEvents)
         }
     }
 }

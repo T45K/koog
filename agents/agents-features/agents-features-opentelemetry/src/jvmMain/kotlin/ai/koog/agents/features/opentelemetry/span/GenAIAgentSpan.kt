@@ -3,9 +3,13 @@ package ai.koog.agents.features.opentelemetry.span
 import ai.koog.agents.features.opentelemetry.attribute.Attribute
 import ai.koog.agents.features.opentelemetry.event.GenAIAgentEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.utils.io.core.toByteArray
 import io.opentelemetry.api.trace.Span
 import io.opentelemetry.api.trace.SpanKind
 import io.opentelemetry.context.Context
+import java.security.MessageDigest
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Represents an abstract base class for a GenAI agent span in a trace.

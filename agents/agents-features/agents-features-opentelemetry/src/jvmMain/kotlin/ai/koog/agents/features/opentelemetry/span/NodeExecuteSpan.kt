@@ -2,8 +2,10 @@ package ai.koog.agents.features.opentelemetry.span
 
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
+import ai.koog.agents.features.opentelemetry.span.CryptographyUtil.sha256base64
 import ai.koog.agents.utils.HiddenString
 import io.opentelemetry.api.trace.SpanKind
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Node Execute Span
@@ -14,18 +16,18 @@ internal class NodeExecuteSpan(
     parent: InvokeAgentSpan,
     val runId: String,
     val nodeName: String,
-    val nodeInput: String?
+    val nodeInput: String
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeName: String): String =
-            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName)
+        fun createId(agentId: String, runId: String, nodeName: String, nodeInput: String): String =
+            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, nodeInput = nodeInput)
 
-        private fun createIdFromParent(parentId: String, nodeName: String): String =
-            "$parentId.node.$nodeName"
+        private fun createIdFromParent(parentId: String, nodeName: String, nodeInput: String): String =
+            "$parentId.node.$nodeName.${nodeInput.sha256base64()}"
     }
 
-    override val spanId: String = createIdFromParent(parent.spanId, nodeName)
+    override val spanId: String = createIdFromParent(parent.spanId, nodeName, nodeInput)
 
     override val kind: SpanKind = SpanKind.INTERNAL
 

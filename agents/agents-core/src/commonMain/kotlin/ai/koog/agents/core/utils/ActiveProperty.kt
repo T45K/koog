@@ -1,5 +1,8 @@
 package ai.koog.agents.core.utils
 
+import io.ktor.utils.io.core.toByteArray
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.reflect.KProperty
 
 /**

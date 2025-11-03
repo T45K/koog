@@ -2,9 +2,11 @@ package ai.koog.agents.features.opentelemetry.span
 
 import ai.koog.agents.features.opentelemetry.attribute.CommonAttributes
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
+import ai.koog.agents.features.opentelemetry.span.CryptographyUtil.sha256base64
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import io.opentelemetry.api.trace.SpanKind
+import kotlinx.serialization.json.JsonNull.content
 
 /**
  * LLM Call Span
@@ -14,20 +16,20 @@ internal class InferenceSpan(
     val provider: LLMProvider,
     val runId: String,
     val model: LLModel,
-    val promptId: String,
+    val content: String,
     val temperature: Double,
     val maxTokens: Int? = null
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeName: String, promptId: String): String =
-            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName), promptId = promptId)
+        fun createId(agentId: String, runId: String, nodeName: String, nodeInput: String): String =
+            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName, nodeInput), content = content)
 
-        private fun createIdFromParent(parentId: String, promptId: String): String =
-            "$parentId.llm.$promptId"
+        private fun createIdFromParent(parentId: String, content: String): String =
+            "$parentId.llm.${content.sha256base64()}"
     }
 
-    override val spanId: String = createIdFromParent(parentId = parent.spanId, promptId = promptId)
+    override val spanId: String = createIdFromParent(parentId = parent.spanId, content = content)
 
     override val kind: SpanKind = SpanKind.CLIENT
 
