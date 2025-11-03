@@ -33,7 +33,7 @@ import kotlinx.serialization.serializer
  */
 @OptIn(ExperimentalStdlibApi::class)
 public sealed class AIAgentLLMSession(
-    private val executor: PromptExecutor,
+    protected val executor: PromptExecutor,
     tools: List<ToolDescriptor>,
     prompt: Prompt,
     model: LLModel,

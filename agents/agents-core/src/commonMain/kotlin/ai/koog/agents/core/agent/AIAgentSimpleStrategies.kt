@@ -13,6 +13,7 @@ import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onMultipleAssistantMessages
 import ai.koog.agents.core.dsl.extension.onMultipleToolCalls
 import ai.koog.agents.core.dsl.extension.onToolCall
+import ai.koog.agents.core.processor.ResponseProcessor
 
 /**
  * Creates a single-run strategy for an AI agent.
@@ -28,19 +29,26 @@ import ai.koog.agents.core.dsl.extension.onToolCall
  *                - SingleRunMode.SINGLE: Executes without allowing multiple simultaneous tool calls.
  *                - SingleRunMode.SEQUENTIAL: Executes simultaneous tool calls sequentially.
  *                - SingleRunMode.PARALLEL: Executes multiple tool calls in parallel.
+ * @param responseProcessor The processor to apply to the LLM response.
  * @return An instance of AIAgentStrategy configured according to the specified single-run mode.
  */
-public fun singleRunStrategy(runMode: ToolCalls = ToolCalls.SINGLE_RUN_SEQUENTIAL): AIAgentGraphStrategy<String, String> =
+public fun singleRunStrategy(
+    runMode: ToolCalls = ToolCalls.SINGLE_RUN_SEQUENTIAL,
+    responseProcessor: ResponseProcessor = ResponseProcessor.None,
+): AIAgentGraphStrategy<String, String> =
     when (runMode) {
-        ToolCalls.SEQUENTIAL -> singleRunWithParallelAbility(false)
-        ToolCalls.PARALLEL -> singleRunWithParallelAbility(true)
-        ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunModeStrategy()
+        ToolCalls.SEQUENTIAL -> singleRunWithParallelAbility(false, responseProcessor)
+        ToolCalls.PARALLEL -> singleRunWithParallelAbility(true, responseProcessor)
+        ToolCalls.SINGLE_RUN_SEQUENTIAL -> singleRunModeStrategy(responseProcessor)
     }
 
-private fun singleRunWithParallelAbility(parallelTools: Boolean) = strategy("single_run_sequential") {
-    val nodeCallLLM by nodeLLMRequestMultiple()
+private fun singleRunWithParallelAbility(
+    parallelTools: Boolean,
+    responseProcessor: ResponseProcessor = ResponseProcessor.None
+) = strategy("single_run_sequential") {
+    val nodeCallLLM by nodeLLMRequestMultiple(responseProcessor = responseProcessor)
     val nodeExecuteTool by nodeExecuteMultipleTools(parallelTools = parallelTools)
-    val nodeSendToolResult by nodeLLMSendMultipleToolResults()
+    val nodeSendToolResult by nodeLLMSendMultipleToolResults(responseProcessor = responseProcessor)
 
     edge(nodeStart forwardTo nodeCallLLM)
     edge(nodeCallLLM forwardTo nodeExecuteTool onMultipleToolCalls { true })
@@ -61,10 +69,10 @@ private fun singleRunWithParallelAbility(parallelTools: Boolean) = strategy("sin
     edge(nodeSendToolResult forwardTo nodeExecuteTool onMultipleToolCalls { true })
 }
 
-private fun singleRunModeStrategy() = strategy("single_run") {
-    val nodeCallLLM by nodeLLMRequest()
+private fun singleRunModeStrategy(responseProcessor: ResponseProcessor) = strategy("single_run") {
+    val nodeCallLLM by nodeLLMRequest(responseProcessor = responseProcessor)
     val nodeExecuteTool by nodeExecuteTool()
-    val nodeSendToolResult by nodeLLMSendToolResult()
+    val nodeSendToolResult by nodeLLMSendToolResult(responseProcessor = responseProcessor)
 
     edge(nodeStart forwardTo nodeCallLLM)
     edge(nodeCallLLM forwardTo nodeExecuteTool onToolCall { true })

@@ -3,6 +3,7 @@ package ai.koog.agents.core.agent.session
 import ai.koog.agents.core.agent.config.AIAgentConfig
 import ai.koog.agents.core.environment.AIAgentEnvironment
 import ai.koog.agents.core.environment.SafeTool
+import ai.koog.agents.core.processor.ResponseProcessor
 import ai.koog.agents.core.tools.Tool
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.agents.core.tools.ToolRegistry
@@ -409,14 +410,41 @@ public class AIAgentLLMWriteSession internal constructor(
     }
 
     /**
-     * Makes an asynchronous request to a Large Language Model (LLM) and updates the current prompt
-     * with the response received from the LLM.
+     * Makes an asynchronous request to a Large Language Model (LLM), processes the response using the provided
+     * responseProcessor, and updates the current prompt with the processed response.
+     *
+     * @param responseProcessor The processor to apply to the LLM response.
+     * @return A [Message.Response] object containing the response from the LLM.
+     */
+    public suspend fun requestLLM(responseProcessor: ResponseProcessor = ResponseProcessor.None): Message.Response {
+        return responseProcessor.process(this, super.requestLLM()).also { response ->
+            appendPrompt { message(response) }
+        }
+    }
+
+    /**
+     * Makes an asynchronous request to a Large Language Model (LLM),
+     * and updates the current prompt with the processed response.
      *
      * @return A [Message.Response] object containing the response from the LLM.
      */
-    override suspend fun requestLLM(): Message.Response {
-        return super.requestLLM().also { response ->
-            appendPrompt { message(response) }
+    override suspend fun requestLLM(): Message.Response = requestLLM(ResponseProcessor.None)
+
+    /**
+     * Requests multiple responses from the LLM and updates the prompt with the received responses.
+     *
+     * This method invokes the superclass implementation to fetch a list of LLM responses. Each
+     * response is subsequently used to update the session's prompt. The prompt updating mechanism
+     * allows stateful interactions with the LLM, maintaining context across multiple requests.
+     *
+     * @param responseProcessor The processor to apply to the LLM response.
+     * @return A list of `Message.Response` containing the results from the LLM.
+     */
+    public suspend fun requestLLMMultiple(responseProcessor: ResponseProcessor = ResponseProcessor.None): List<Message.Response> {
+        return responseProcessor.process(this, super.requestLLMMultiple()).also { responses ->
+            appendPrompt {
+                responses.forEach { message(it) }
+            }
         }
     }
 
@@ -429,13 +457,7 @@ public class AIAgentLLMWriteSession internal constructor(
      *
      * @return A list of `Message.Response` containing the results from the LLM.
      */
-    override suspend fun requestLLMMultiple(): List<Message.Response> {
-        return super.requestLLMMultiple().also { responses ->
-            appendPrompt {
-                responses.forEach { message(it) }
-            }
-        }
-    }
+    override suspend fun requestLLMMultiple(): List<Message.Response> = requestLLMMultiple(ResponseProcessor.None)
 
     /**
      * Sends a request to LLM and gets a structured response.
@@ -501,5 +523,26 @@ public class AIAgentLLMWriteSession internal constructor(
             this.prompt = prompt
         }
         return super.requestLLMStreaming()
+    }
+
+    /**
+     * Creates a copy of the current AIAgentLLMWriteSession
+     */
+    public fun copy(
+        prompt: Prompt? = null,
+        tools: List<ToolDescriptor>? = null,
+        model: LLModel? = null
+    ): AIAgentLLMWriteSession {
+        validateSession()
+        return AIAgentLLMWriteSession(
+            environment,
+            executor,
+            tools ?: this.tools,
+            toolRegistry,
+            prompt ?: this.prompt,
+            model ?: this.model,
+            config,
+            clock
+        )
     }
 }
