@@ -1,5 +1,6 @@
 package ai.koog.agents.features.opentelemetry.span
 
+import ai.koog.agents.core.agent.context.AIAgentGraphContextBase
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.span.CryptographyUtil.sha256base64
@@ -16,18 +17,19 @@ internal class NodeExecuteSpan(
     parent: InvokeAgentSpan,
     val runId: String,
     val nodeName: String,
-    val nodeInput: String
+    val nodeInput: String?,
+    val agentContext: AIAgentGraphContextBase,
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeName: String, nodeInput: String): String =
-            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, nodeInput = nodeInput)
+        fun createId(agentId: String, runId: String, nodeName: String, agentContext: AIAgentGraphContextBase): String =
+            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, agentContext = agentContext)
 
-        private fun createIdFromParent(parentId: String, nodeName: String, nodeInput: String): String =
-            "$parentId.node.$nodeName.$nodeInput"//.sha256base64()}"
+        private fun createIdFromParent(parentId: String, nodeName: String, agentContext: AIAgentGraphContextBase): String =
+            "$parentId.node.$nodeName.${agentContext.hashCode()}"//.sha256base64()}"
     }
 
-    override val spanId: String = createIdFromParent(parent.spanId, nodeName, nodeInput)
+    override val spanId: String = createIdFromParent(parent.spanId, nodeName, agentContext)
 
     override val kind: SpanKind = SpanKind.INTERNAL
 
