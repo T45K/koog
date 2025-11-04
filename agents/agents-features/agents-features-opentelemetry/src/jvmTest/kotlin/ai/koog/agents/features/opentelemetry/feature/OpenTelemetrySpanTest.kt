@@ -569,7 +569,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.test-node-llm-send-tool-result.${ReceivedToolResult(toolCallId, TestGetWeatherTool.name, TestGetWeatherTool.DEFAULT_PARIS_RESULT, TestGetWeatherTool.DEFAULT_PARIS_RESULT)}" to mapOf(
+                    "node.test-node-llm-send-tool-result.${TestGetWeatherTool.DEFAULT_PARIS_RESULT}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "test-node-llm-send-tool-result",

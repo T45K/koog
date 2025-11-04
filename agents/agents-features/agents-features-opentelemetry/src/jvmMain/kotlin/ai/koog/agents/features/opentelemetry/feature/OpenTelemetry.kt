@@ -4,6 +4,7 @@ import ai.koog.agents.core.agent.context.element.getAgentRunInfoElement
 import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.entity.AIAgentStorageKey
 import ai.koog.agents.core.annotation.InternalAgentsApi
+import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.feature.AIAgentGraphFeature
 import ai.koog.agents.core.feature.pipeline.AIAgentGraphPipeline
 import ai.koog.agents.core.utils.SerializationUtils
@@ -560,20 +561,20 @@ public class OpenTelemetry {
         //region Private Methods
 
         /**
-         * Retrieves the JSON representation of the given data based on its type.
+         * Retrieves the [String] representation of the given data based on its type.
+         *
+         * Note: See [KG-485](https://youtrack.jetbrains.com/issue/KG-485)
+         *       Workaround for processing non-serializable [ReceivedToolResult] type in the node input/output.
          */
-        @OptIn(InternalAgentsApi::class)
-        private fun nodeDataToJsonElement(data: Any?, dataType: KType): JsonElement =
-            SerializationUtils.encodeDataToJsonElementOrDefault(data, dataType)
-
-        /**
-         * Retrieves the String representation of the given data based on its type.
-         */
-        // TODO: SD -- revert the fix for ReceivedToolResult
-        @OptIn(InternalAgentsApi::class)
-        private fun nodeDataToString(data: Any?, dataType: KType): String =
-            SerializationUtils.encodeDataToStringOrDefault(data, dataType)
-
+        private fun nodeDataToString(data: Any?, dataType: KType): String {
+            @OptIn(InternalAgentsApi::class)
+            return SerializationUtils.encodeDataToStringOrDefault(data, dataType) {
+                when (data) {
+                    is ReceivedToolResult -> data.content
+                    else -> data.toString()
+                }
+            }
+        }
 
         //endregion Private Methods
     }
