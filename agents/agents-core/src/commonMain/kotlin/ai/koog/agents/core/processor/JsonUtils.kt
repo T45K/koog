@@ -4,14 +4,14 @@ import ai.koog.agents.core.agent.session.AIAgentLLMWriteSession
 import ai.koog.agents.core.tools.ToolParameterType
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.message.ResponseMetaInfo
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.KSerializer
 
 @Serializable
 private data class ToolCall(
@@ -171,4 +171,3 @@ public val defaultToolKeys: List<String> = listOf("name", "tool", "tool_name")
  * Keys used by various models for tool arguments in tool call json
  */
 public val defaultArgsKeys: List<String> = listOf("arguments", "args", "parameters", "params", "tool_args")
-

@@ -17,7 +17,7 @@ import ai.koog.prompt.text.text
  * If a tool call was intended, LLM is asked to do a proper llm call.
  */
 @ResponseProcessorApi
-public class ToolCallFixLLMAsAJudge(
+public class LLMBasedToolCallExtractor(
     private val intentSystemMessage: String = text { assessToolCallIntent() },
     private val fixSystemMessage: String = text { fixToolCall() },
     private val getFeedback: AIAgentLLMWriteSession.(Message.Response, List<String>) -> String? =

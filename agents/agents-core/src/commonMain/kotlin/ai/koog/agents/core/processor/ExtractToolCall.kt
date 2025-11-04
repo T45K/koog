@@ -3,7 +3,6 @@ package ai.koog.agents.core.processor
 import ai.koog.agents.core.agent.session.AIAgentLLMWriteSession
 import ai.koog.prompt.message.Message
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.serializer
 
 /**
  * A response processor that extracts tool calls from JSON responses.

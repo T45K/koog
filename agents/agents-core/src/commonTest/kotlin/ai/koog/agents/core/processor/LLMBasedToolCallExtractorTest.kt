@@ -24,7 +24,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 @OptIn(ResponseProcessorApi::class)
-class ToolCallFixLLMAsAJudgeTest {
+class LLMBasedToolCallExtractorTest {
     private companion object {
         private val testClock: Clock = object : Clock {
             override fun now(): Instant = Instant.parse("2023-01-01T00:00:00Z")
@@ -45,7 +45,7 @@ class ToolCallFixLLMAsAJudgeTest {
             tool(CalculatorTools.PlusTool)
         }
 
-        private val processor = ToolCallFixLLMAsAJudge()
+        private val processor = LLMBasedToolCallExtractor()
 
         private val message = Message.Assistant("I want to use the calculator tool", metaInfo = testMetaInfo)
     }
@@ -175,7 +175,7 @@ class ToolCallFixLLMAsAJudgeTest {
             toolRegistry = toolRegistry
         )
 
-        val processor = ToolCallFixLLMAsAJudge(
+        val processor = LLMBasedToolCallExtractor(
             maxRetries = 1,
         )
 
@@ -193,7 +193,7 @@ class ToolCallFixLLMAsAJudgeTest {
         )
 
         val fallbackExecutor = MockExecutor(listOf(toolCallMessage))
-        val processor = ToolCallFixLLMAsAJudge(
+        val processor = LLMBasedToolCallExtractor(
             fallback = { fallbackExecutor.execute(prompt, model, tools).first() },
             maxRetries = 1,
         )

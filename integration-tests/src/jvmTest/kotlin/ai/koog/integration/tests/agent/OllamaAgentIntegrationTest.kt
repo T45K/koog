@@ -12,8 +12,8 @@ import ai.koog.agents.core.dsl.extension.nodeLLMRequest
 import ai.koog.agents.core.dsl.extension.nodeLLMSendToolResult
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onToolCall
+import ai.koog.agents.core.processor.LLMBasedToolCallExtractor
 import ai.koog.agents.core.processor.ResponseProcessorApi
-import ai.koog.agents.core.processor.ToolCallFixLLMAsAJudge
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.integration.tests.InjectOllamaTestFixture
@@ -217,9 +217,9 @@ class OllamaAgentIntegrationTest {
     @OptIn(ResponseProcessorApi::class)
     @ParameterizedTest
     @MethodSource("weakOllamaModels")
-    fun ollama_testLLMAsAJudgeToolCallFix(llmModel: LLModel) = runTest(timeout = 600.seconds) {
+    fun ollama_testLLMBasedToolCallExtractor(llmModel: LLModel) = runTest(timeout = 600.seconds) {
         withRetry(5) {
-            val responseProcessor = ToolCallFixLLMAsAJudge(showHistory = true)
+            val responseProcessor = LLMBasedToolCallExtractor(showHistory = true)
             val strategy = singleRunStrategy(responseProcessor = responseProcessor)
 
             val fileTools = FileOperationsTools()
