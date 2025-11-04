@@ -27,6 +27,7 @@ import ai.koog.agents.utils.HiddenString
 import ai.koog.prompt.message.Message
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.opentelemetry.api.trace.StatusCode
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlin.reflect.KType
 
@@ -345,7 +346,8 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeName = nodeInfoElement.nodeName,
-                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType)
+                    nodeInput = nodeDataToString(nodeInfoElement.input, nodeInfoElement.inputType),
+                    content = eventContext.prompt.messages.lastOrNull()?.content ?: "",
                 )
 
                 val inferenceSpan = spanProcessor.getSpanCatching<InferenceSpan>(inferenceSpanId)
@@ -567,6 +569,7 @@ public class OpenTelemetry {
         /**
          * Retrieves the String representation of the given data based on its type.
          */
+        // TODO: SD -- revert the fix for ReceivedToolResult
         @OptIn(InternalAgentsApi::class)
         private fun nodeDataToString(data: Any?, dataType: KType): String =
             SerializationUtils.encodeDataToStringOrDefault(data, dataType)

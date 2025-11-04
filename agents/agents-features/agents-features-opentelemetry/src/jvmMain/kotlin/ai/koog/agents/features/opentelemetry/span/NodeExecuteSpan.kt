@@ -24,7 +24,7 @@ internal class NodeExecuteSpan(
             createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, nodeInput = nodeInput)
 
         private fun createIdFromParent(parentId: String, nodeName: String, nodeInput: String): String =
-            "$parentId.node.$nodeName.${nodeInput.sha256base64()}"
+            "$parentId.node.$nodeName.$nodeInput"//.sha256base64()}"
     }
 
     override val spanId: String = createIdFromParent(parent.spanId, nodeName, nodeInput)
