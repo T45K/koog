@@ -7,6 +7,7 @@ import ai.koog.agents.core.dsl.extension.nodeLLMRequest
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgentWithSingleLLMCallStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetry
@@ -25,7 +26,13 @@ import kotlin.test.assertTrue
 class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
 
     @Test
-    fun `test spans are created for agent with one llm call`() = runTest {
+    fun `test create agent spans are created`() = runTest {
+
+        createAgentWithSingleLLMCallStrategy(
+            filter = { it.name == "create_agent" }
+        )
+
+
         MockSpanExporter().use { mockExporter ->
 
             val systemPrompt = "You are the application that predicts weather"

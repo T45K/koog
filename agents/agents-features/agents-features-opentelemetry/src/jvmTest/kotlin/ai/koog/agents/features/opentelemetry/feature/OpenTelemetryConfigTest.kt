@@ -1,7 +1,6 @@
 package ai.koog.agents.features.opentelemetry.feature
 
 import ai.koog.agents.core.agent.context.element.getNodeInfoElement
-import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
 import ai.koog.agents.core.dsl.extension.nodeExecuteTool
@@ -10,11 +9,9 @@ import ai.koog.agents.core.dsl.extension.nodeLLMSendToolResult
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onToolCall
 import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgent
-import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createCustomSdk
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
@@ -31,7 +28,6 @@ import ai.koog.utils.io.use
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import kotlinx.coroutines.test.runTest
 import java.util.Properties
-import kotlin.reflect.typeOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -113,6 +109,11 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
     }
 
     @Test
+    fun `test filter is not allowed for open telemetry feature`() = runTest {
+        // TODO: SD -- add test to verify that events are not filtered
+    }
+
+    @Test
     fun `test install Open Telemetry feature with custom sdk, should use provided sdk`() = runTest {
         val strategy = strategy<String, String>("test-strategy") {
             edge(nodeStart forwardTo nodeFinish transformed { "Done" })
@@ -134,7 +135,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
     }
 
     @Test
-    fun `test Open Telemetry feature with custom sdk configuration emits correct spans`() = runTest {
+    fun `test custom sdk configuration emits correct spans`() = runTest {
         MockSpanExporter().use { mockExporter ->
             val userPrompt = "What's the weather in Paris?"
 
@@ -486,4 +487,5 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
             assertSpans(expectedSpans, collectedSpans)
         }
     }
+
 }
