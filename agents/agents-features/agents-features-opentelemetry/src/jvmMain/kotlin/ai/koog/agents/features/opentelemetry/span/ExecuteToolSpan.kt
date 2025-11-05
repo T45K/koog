@@ -18,8 +18,9 @@ internal class ExecuteToolSpan(
         fun createId(agentId: String, runId: String, nodeName: String, nodeId: String, toolName: String): String =
             createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName, nodeId), toolName = toolName)
 
-        private fun createIdFromParent(parentId: String, toolName: String): String =
-            "$parentId.tool.$toolName"
+        private fun createIdFromParent(parentId: String, toolName: String, toolCallArgs: String): String =
+            // TODO: SD -- calculate sha for toolCallArgs
+            "$parentId.tool.$toolName.args.$toolCallArgs"
     }
 
     override val spanId: String = createIdFromParent(parent.spanId, tool.name)

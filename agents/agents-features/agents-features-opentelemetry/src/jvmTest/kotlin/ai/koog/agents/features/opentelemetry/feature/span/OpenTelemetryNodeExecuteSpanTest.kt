@@ -3,7 +3,7 @@ package ai.koog.agents.features.opentelemetry.feature.span
 import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
-import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgentWithSingleLLMCallStrategy
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleLLMCallStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.prompt.message.Message
@@ -20,7 +20,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
     fun `test node execute spans are collected`() = runTest {
         val attributeKey = AttributeKey.stringKey("koog.node.name")
 
-        val collectedTestData = createAgentWithSingleLLMCallStrategy(
+        val collectedTestData = runAgentWithSingleLLMCallStrategy(
             filter = { spanData -> spanData.attributes.get(attributeKey) != null }
         )
 

@@ -1,7 +1,7 @@
 package ai.koog.agents.features.opentelemetry.feature.span
 
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
-import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgentWithSingleLLMCallStrategy
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleLLMCallStrategy
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Operation.OperationNameType
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
@@ -20,7 +20,7 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
 
         val attributeKey = AttributeKey.stringKey(createAgentAttribute.key)
 
-        val collectedTestData = createAgentWithSingleLLMCallStrategy(
+        val collectedTestData = runAgentWithSingleLLMCallStrategy(
             filter = { spanData ->
                 spanData.attributes.get(attributeKey) == createAgentAttribute.value ||
                     spanData.attributes.get(attributeKey) == invokeAgentAttribute.value

@@ -39,12 +39,9 @@ internal object OpenTelemetryTestAPI {
 
     //region Run Agents With Strategies
 
-    internal suspend fun createAgentWithSingleLLMCallStrategy(
-        executor: PromptExecutor? = null,
+    internal suspend fun runAgentWithSingleLLMCallStrategy(
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
-
-        val userPrompt = "What's the weather in Paris?"
 
         val strategy = strategy("test-single-llm-strategy") {
             val nodeSendInput by nodeLLMRequest("test-llm-call")
@@ -53,9 +50,10 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
         }
 
+        val userPrompt = "What's the weather in Paris?"
         val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
 
-        val executor = executor ?: getMockExecutor(clock = testClock) {
+        val executor = getMockExecutor(clock = testClock) {
             mockLLMAnswer(llmResult) onRequestEquals userPrompt
         }
 
@@ -70,10 +68,63 @@ internal object OpenTelemetryTestAPI {
         )
     }
 
+    internal suspend fun runAgentWithSingleToolCallStrategy(
+        filter: (SpanData) -> Boolean = { true },
+    ): OpenTelemetryTestData {
+
+        val strategy = strategy("test-tool-calls-strategy") {
+            val nodeSendInput by nodeLLMRequest("test-llm-call")
+            val nodeExecuteTool by nodeExecuteTool("test-tool-call")
+            val nodeSendToolResult by nodeLLMSendToolResult("test-node-llm-send-tool-result")
+
+            edge(nodeStart forwardTo nodeSendInput)
+            edge(nodeSendInput forwardTo nodeExecuteTool onToolCall { true })
+            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+            edge(nodeExecuteTool forwardTo nodeSendToolResult)
+            edge(nodeSendToolResult forwardTo nodeFinish onAssistantMessage { true })
+            edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
+        }
+
+        val userPrompt = "What's the weather in Paris?"
+        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
+
+        val toolRegistry = ToolRegistry.Companion {
+            tool(TestGetWeatherTool)
+        }
+
+        val toolCallId = "tool-call-id"
+        val toolCallArg = "Paris"
+
+        val executor = getMockExecutor(clock = testClock) {
+            mockLLMToolCall(
+                tool = TestGetWeatherTool,
+                args = TestGetWeatherTool.Args(toolCallArg),
+                toolCallId = toolCallId
+            ) onRequestEquals userPrompt
+            mockLLMAnswer(llmResult) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
+        }
+
+        val collectedTestData = OpenTelemetryTestData(
+            userPrompt = userPrompt,
+            result = llmResult,
+            toolCallId = toolCallId,
+            toolCallArg = toolCallArg,
+        )
+
+        return runAgentWithStrategy(
+            strategy = strategy,
+            userPrompt = userPrompt,
+            executor = executor,
+            toolRegistry = toolRegistry,
+            filter = filter,
+            collectedTestData = collectedTestData
+        )
+    }
+
     internal suspend fun runAgentWithToolCallStrategy(
         userPrompt: String,
         toolArgsLocation: String,
-        toolResultWeather: String,
+        llmResponse: String,
         executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
@@ -97,13 +148,13 @@ internal object OpenTelemetryTestAPI {
 
         val toolCallId = "tool-call-id"
 
-        val mockExecutor = executor ?: getMockExecutor(clock = testClock) {
+        val executor = executor ?: getMockExecutor(clock = testClock) {
             mockLLMToolCall(
                 tool = TestGetWeatherTool,
-                args = TestGetWeatherTool.Args("Paris"),
+                args = TestGetWeatherTool.Args(toolArgsLocation),
                 toolCallId = toolCallId
             ) onRequestEquals userPrompt
-            mockLLMAnswer(mockResponse) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
+            mockLLMAnswer(llmResponse) onRequestContains toolArgsLocation
         }
 
         return runAgentWithStrategy(
