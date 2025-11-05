@@ -18,6 +18,7 @@ import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetry
 import ai.koog.agents.features.opentelemetry.mock.MockSpanExporter
+import ai.koog.agents.features.opentelemetry.mock.TestGetWeatherTool
 import ai.koog.agents.testing.tools.getMockExecutor
 import ai.koog.prompt.dsl.prompt
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
@@ -32,24 +33,6 @@ import kotlin.io.use
 
 internal object OpenTelemetryTestAPI {
 
-    internal data class NodeInfo(val nodeName: String, val nodeId: String)
-
-    internal data class OpenTelemetryTestData(
-        val agentId: String,
-        val runId: String,
-        val model: LLModel,
-        val temperature: Double,
-        val userPrompt: String,
-        val systemPrompt: String,
-        val result: String,
-        val collectedSpans: List<SpanData>,
-        val collectedNodeIds: List<NodeInfo>
-    ) {
-        fun filterNodeInfoByName(nodeName: String): List<NodeInfo> = collectedNodeIds.filter { it.nodeName == nodeName }
-        fun singleNodeInfoByName(nodeName: String): NodeInfo = collectedNodeIds.single { it.nodeName == nodeName }
-        fun singleNodeIdByName(nodeName: String): String = singleNodeInfoByName(nodeName).nodeId
-    }
-
     internal val testClock: Clock = object : Clock {
         override fun now(): Instant = Instant.parse("2023-01-01T00:00:00Z")
     }
@@ -61,6 +44,8 @@ internal object OpenTelemetryTestAPI {
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
 
+        val userPrompt = "What's the weather in Paris?"
+
         val strategy = strategy("test-single-llm-strategy") {
             val nodeSendInput by nodeLLMRequest("test-llm-call")
 
@@ -68,13 +53,31 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
         }
 
-        return runAgentWithStrategy(strategy, executor, filter)
+        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
+
+        val executor = executor ?: getMockExecutor(clock = testClock) {
+            mockLLMAnswer(llmResult) onRequestEquals userPrompt
+        }
+
+        val collectedTestData = OpenTelemetryTestData(userPrompt = userPrompt, result = llmResult)
+
+        return runAgentWithStrategy(
+            strategy = strategy,
+            userPrompt = userPrompt,
+            executor = executor,
+            filter = filter,
+            collectedTestData = collectedTestData
+        )
     }
 
     internal suspend fun runAgentWithToolCallStrategy(
+        userPrompt: String,
+        toolArgsLocation: String,
+        toolResultWeather: String,
         executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
+
         val strategy = strategy("test-tool-calls-strategy") {
             val nodeSendInput by nodeLLMRequest("test-llm-call")
             val nodeExecuteTool by nodeExecuteTool("test-tool-call")
@@ -88,10 +91,32 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
         }
 
-        return runAgentWithStrategy(strategy, executor, filter)
+        val toolRegistry = ToolRegistry.Companion {
+            tool(TestGetWeatherTool)
+        }
+
+        val toolCallId = "tool-call-id"
+
+        val mockExecutor = executor ?: getMockExecutor(clock = testClock) {
+            mockLLMToolCall(
+                tool = TestGetWeatherTool,
+                args = TestGetWeatherTool.Args("Paris"),
+                toolCallId = toolCallId
+            ) onRequestEquals userPrompt
+            mockLLMAnswer(mockResponse) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
+        }
+
+        return runAgentWithStrategy(
+            strategy = strategy,
+            userPrompt = userPrompt,
+            executor = executor,
+            toolRegistry = toolRegistry,
+            filter = filter,
+        )
     }
 
     internal suspend fun runAgentWithErrorStrategy(
+        userPrompt: String? = null,
         executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
@@ -104,10 +129,16 @@ internal object OpenTelemetryTestAPI {
             edge(nodeWithError forwardTo nodeFinish)
         }
 
-        return runAgentWithStrategy(strategy, executor, filter)
+        return runAgentWithStrategy(
+            strategy = strategy,
+            userPrompt = userPrompt,
+            executor = executor,
+            filter = filter,
+        )
     }
 
     internal suspend fun runAgentWithParallelToolCallStrategy(
+        userPrompt: String? = null,
         executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
@@ -140,28 +171,30 @@ internal object OpenTelemetryTestAPI {
             edge(nodeGenerateJokes forwardTo nodeFinish)
         }
 
-        return runAgentWithStrategy(strategy, executor, filter)
+        return runAgentWithStrategy(
+            strategy = strategy,
+            userPrompt = userPrompt,
+            executor = executor,
+            filter = filter,
+        )
     }
 
     internal suspend fun runAgentWithStrategy(
         strategy: AIAgentGraphStrategy<String, String>,
+        userPrompt: String? = null,
         executor: PromptExecutor? = null,
+        toolRegistry: ToolRegistry? = null,
         filter: (SpanData) -> Boolean = { true },
+        collectedTestData: OpenTelemetryTestData? = null
     ): OpenTelemetryTestData {
 
         val systemPrompt = "You are the application that predicts weather"
-        val userPrompt = "What's the weather in Paris?"
+        val userPrompt = userPrompt ?: "What's the weather in Paris?"
 
         val agentId = "test-agent-id"
         val promptId = "test-prompt-id"
         val model = OpenAIModels.Chat.GPT4o
         val temperature = 0.4
-
-        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
-
-        val mockExecutor = executor ?: getMockExecutor(clock = testClock) {
-            mockLLMAnswer(llmResult) onRequestEquals userPrompt
-        }
 
         var nodesInfo: List<NodeInfo> = emptyList()
 
@@ -169,8 +202,9 @@ internal object OpenTelemetryTestAPI {
             createAgent(
                 agentId = agentId,
                 strategy = strategy,
-                executor = mockExecutor,
+                executor = executor,
                 promptId = promptId,
+                toolRegistry = toolRegistry,
                 systemPrompt = systemPrompt,
                 model = model,
                 temperature = temperature
@@ -185,16 +219,17 @@ internal object OpenTelemetryTestAPI {
                 agent.run(userPrompt)
             }
 
-            OpenTelemetryTestData(
-                agentId = agentId,
-                runId = mockExporter.lastRunId,
-                model = model,
-                temperature = temperature,
-                userPrompt = userPrompt,
-                systemPrompt = systemPrompt,
-                result = llmResult,
-                collectedSpans = mockExporter.collectedSpans,
-                collectedNodeIds = nodesInfo
+            (collectedTestData ?: OpenTelemetryTestData()).merge(
+                OpenTelemetryTestData(
+                    agentId = agentId,
+                    runId = mockExporter.lastRunId,
+                    model = model,
+                    temperature = temperature,
+                    userPrompt = userPrompt,
+                    systemPrompt = systemPrompt,
+                    collectedSpans = mockExporter.collectedSpans,
+                    collectedNodeIds = nodesInfo
+                )
             )
         }
     }
@@ -265,7 +300,7 @@ internal object OpenTelemetryTestAPI {
         )
 
         return AIAgentService(
-            promptExecutor = executor ?: getMockExecutor { },
+            promptExecutor = executor ?: getMockExecutor(clock = testClock) { },
             strategy = strategy,
             agentConfig = agentConfig,
             toolRegistry = toolRegistry ?: ToolRegistry { },

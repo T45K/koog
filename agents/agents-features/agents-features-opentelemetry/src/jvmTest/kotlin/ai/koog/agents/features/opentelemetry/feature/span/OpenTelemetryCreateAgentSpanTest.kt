@@ -39,9 +39,9 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
                 "agent.$agentId" to mapOf(
                     "attributes" to mapOf(
                         "gen_ai.operation.name" to "create_agent",
-                        "gen_ai.system" to model.provider.id,
+                        "gen_ai.system" to model?.provider?.id,
                         "gen_ai.agent.id" to agentId,
-                        "gen_ai.request.model" to model.id
+                        "gen_ai.request.model" to model?.id
                     ),
                     "events" to emptyMap()
                 )
@@ -51,7 +51,7 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
                 "run.$runId" to mapOf(
                     "attributes" to mapOf(
                         "gen_ai.operation.name" to "invoke_agent",
-                        "gen_ai.system" to model.provider.id,
+                        "gen_ai.system" to model?.provider?.id,
                         "gen_ai.agent.id" to agentId,
                         "gen_ai.conversation.id" to runId
                     ),

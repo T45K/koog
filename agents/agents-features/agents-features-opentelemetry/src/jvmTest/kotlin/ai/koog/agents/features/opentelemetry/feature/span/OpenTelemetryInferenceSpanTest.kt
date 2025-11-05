@@ -37,15 +37,15 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
                 "llm.${userPrompt}" to mapOf(
                     "attributes" to mapOf(
                         "gen_ai.operation.name" to "chat",
-                        "gen_ai.system" to model.provider.id,
+                        "gen_ai.system" to model?.provider?.id,
                         "gen_ai.conversation.id" to runId,
                         "gen_ai.request.temperature" to temperature,
-                        "gen_ai.request.model" to model.id,
+                        "gen_ai.request.model" to model?.id,
                         "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id)
                     ),
                     "events" to mapOf(
                         "gen_ai.user.message" to mapOf(
-                            "gen_ai.system" to model.provider.id,
+                            "gen_ai.system" to model?.provider?.id,
                             "role" to Message.Role.User.name.lowercase(),
                             "content" to userPrompt
                         )
@@ -53,17 +53,17 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
 
                     "events" to mapOf(
                         "gen_ai.system.message" to mapOf(
-                            "gen_ai.system" to model.provider.id,
+                            "gen_ai.system" to model?.provider?.id,
                             "role" to Message.Role.System.name.lowercase(),
                             "content" to systemPrompt,
                         ),
                         "gen_ai.user.message" to mapOf(
-                            "gen_ai.system" to model.provider.id,
+                            "gen_ai.system" to model?.provider?.id,
                             "role" to Message.Role.User.name.lowercase(),
                             "content" to userPrompt,
                         ),
                         "gen_ai.assistant.message" to mapOf(
-                            "gen_ai.system" to model.provider.id,
+                            "gen_ai.system" to model?.provider?.id,
                             "role" to Message.Role.Assistant.name.lowercase(),
                             "content" to result,
                         )

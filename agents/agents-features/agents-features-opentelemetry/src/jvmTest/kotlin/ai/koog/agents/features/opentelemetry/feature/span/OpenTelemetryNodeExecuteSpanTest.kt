@@ -34,7 +34,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
         @OptIn(InternalAgentsApi::class)
         val serializedAssistantResponse = SerializationUtils.encodeDataToStringOrDefault(
             data = Message.Assistant(
-                content = result,
+                content = result.toString(),
                 metaInfo = ResponseMetaInfo(
                     timestamp = testClock.now()
                 )
