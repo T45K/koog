@@ -34,7 +34,13 @@ internal object OpenTelemetryTestAPI {
 
     internal data class NodeInfo(val nodeName: String, val nodeId: String)
 
-    internal data class OpenTelemetryTestData(val collectedSpans: List<SpanData>, val collectedNodeIds: List<NodeInfo>)
+    internal data class OpenTelemetryTestData(
+        val agentId: String,
+        val runId: String,
+        val model: LLModel,
+        val collectedSpans: List<SpanData>,
+        val collectedNodeIds: List<NodeInfo>
+    )
 
     internal val testClock: Clock = object : Clock {
         override fun now(): Instant = Instant.parse("2023-01-01T00:00:00Z")
@@ -167,7 +173,13 @@ internal object OpenTelemetryTestAPI {
                 agent.run(userPrompt)
             }
 
-            OpenTelemetryTestData(collectedSpans = mockExporter.collectedSpans, collectedNodeIds = nodesInfo)
+            OpenTelemetryTestData(
+                agentId = agentId,
+                runId = mockExporter.lastRunId,
+                model = model,
+                collectedSpans = mockExporter.collectedSpans,
+                collectedNodeIds = nodesInfo
+            )
         }
     }
 
