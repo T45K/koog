@@ -36,7 +36,7 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
             mapOf(
                 "llm.${userPrompt}" to mapOf(
                     "attributes" to mapOf(
-                        "gen_ai.operation.name" to "chat",
+                        "gen_ai.operation.name" to OperationNameType.CHAT.id,
                         "gen_ai.system" to model?.provider?.id,
                         "gen_ai.conversation.id" to runId,
                         "gen_ai.request.temperature" to temperature,

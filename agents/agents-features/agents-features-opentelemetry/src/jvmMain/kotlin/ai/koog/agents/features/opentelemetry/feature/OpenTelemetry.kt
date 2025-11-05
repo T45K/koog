@@ -9,6 +9,7 @@ import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.feature.AIAgentGraphFeature
 import ai.koog.agents.core.feature.pipeline.AIAgentGraphPipeline
+import ai.koog.agents.core.tools.Tool
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.opentelemetry.attribute.CommonAttributes
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
@@ -499,10 +500,12 @@ public class OpenTelemetry {
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecutionSpanId)
                     ?: return@intercept
 
+                @Suppress("UNCHECKED_CAST")
                 val executeToolSpan = ExecuteToolSpan(
                     parent = nodeExecuteSpan,
-                    tool = eventContext.tool,
-                    toolArgs = eventContext.toolArgs,
+                    toolName = eventContext.tool.name,
+                    toolDescription = eventContext.tool.description,
+                    toolArgs = (eventContext.tool as Tool<Any?, Any?>).encodeArgsToString(eventContext.toolArgs),
                     toolCallId = eventContext.toolCallId,
                 )
 
@@ -517,12 +520,14 @@ public class OpenTelemetry {
                 val agentRunInfoElement = getAgentRunInfoElementCatching() ?: return@intercept
                 val nodeInfoElement = getNodeInfoElementCatching() ?: return@intercept
 
+                @Suppress("UNCHECKED_CAST")
                 val executeToolSpanId = ExecuteToolSpan.createId(
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
                     nodeName = nodeInfoElement.name,
                     toolName = eventContext.tool.name,
+                    toolArgs = (eventContext.tool as Tool<Any?, Any?>).encodeArgsToString(eventContext.toolArgs),
                 )
 
                 val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
@@ -550,12 +555,14 @@ public class OpenTelemetry {
                 val agentRunInfoElement = getAgentRunInfoElementCatching() ?: return@intercept
                 val nodeInfoElement = getNodeInfoElementCatching() ?: return@intercept
 
+                @Suppress("UNCHECKED_CAST")
                 val executeToolSpanId = ExecuteToolSpan.createId(
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
                     nodeName = nodeInfoElement.name,
-                    toolName = eventContext.tool.name
+                    toolName = eventContext.tool.name,
+                    toolArgs = (eventContext.tool as Tool<Any?, Any?>).encodeArgsToString(eventContext.toolArgs),
                 )
 
                 val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
@@ -585,7 +592,8 @@ public class OpenTelemetry {
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
                     nodeName = nodeInfoElement.name,
-                    toolName = eventContext.tool.name
+                    toolName = eventContext.tool.name,
+                    toolArgs = eventContext.toolArgs.toString(),
                 )
 
                 val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)

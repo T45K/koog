@@ -16,6 +16,7 @@ import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpan
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
+import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Operation.OperationNameType
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetry
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.agents.features.opentelemetry.mock.MockSpanExporter
@@ -170,7 +171,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "agent.$agentId" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "create_agent",
+                            "gen_ai.operation.name" to OperationNameType.CREATE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.request.model" to model.id
@@ -182,7 +183,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "run.${mockExporter.lastRunId}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "invoke_agent",
+                            "gen_ai.operation.name" to OperationNameType.INVOKE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.conversation.id" to mockExporter.lastRunId
@@ -227,7 +228,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "llm.${userPrompt}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "chat",
+                            "gen_ai.operation.name" to OperationNameType.CHAT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "gen_ai.request.temperature" to temperature,
@@ -346,7 +347,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "agent.$agentId" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "create_agent",
+                            "gen_ai.operation.name" to OperationNameType.CREATE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.request.model" to model.id
@@ -359,7 +360,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "run.${mockExporter.runIds[1]}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "invoke_agent",
+                            "gen_ai.operation.name" to OperationNameType.INVOKE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.conversation.id" to mockExporter.runIds[1]
@@ -404,7 +405,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "llm.${userPrompt1}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "chat",
+                            "gen_ai.operation.name" to OperationNameType.CHAT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.conversation.id" to mockExporter.runIds[1],
                             "gen_ai.request.temperature" to temperature,
@@ -447,7 +448,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "run.${mockExporter.runIds[0]}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "invoke_agent",
+                            "gen_ai.operation.name" to OperationNameType.INVOKE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.conversation.id" to mockExporter.runIds[0]
@@ -492,7 +493,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "llm.${userPrompt0}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "chat",
+                            "gen_ai.operation.name" to OperationNameType.CHAT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.conversation.id" to mockExporter.runIds[0],
                             "gen_ai.request.temperature" to temperature,
@@ -631,7 +632,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.request.model" to model.id,
-                            "gen_ai.operation.name" to "create_agent",
+                            "gen_ai.operation.name" to OperationNameType.CREATE_AGENT.id,
                         ),
                         "events" to emptyMap()
                     )
@@ -642,7 +643,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
-                            "gen_ai.operation.name" to "invoke_agent",
+                            "gen_ai.operation.name" to OperationNameType.INVOKE_AGENT.id,
                         ),
                         "events" to emptyMap()
                     )
@@ -675,7 +676,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.request.model" to model.id,
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
-                            "gen_ai.operation.name" to "chat",
+                            "gen_ai.operation.name" to OperationNameType.CHAT.id,
                             "gen_ai.request.temperature" to temperature,
                             "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id),
                         ),
@@ -750,7 +751,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.request.model" to model.id,
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
-                            "gen_ai.operation.name" to "chat",
+                            "gen_ai.operation.name" to OperationNameType.CHAT.id,
                             "gen_ai.request.temperature" to temperature,
                             "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.ToolCalls.id),
                         ),
@@ -966,7 +967,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "agent.$agentId" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "create_agent",
+                            "gen_ai.operation.name" to OperationNameType.CREATE_AGENT.id,
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.request.model" to model.id
@@ -978,7 +979,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mapOf(
                     "run.${mockExporter.lastRunId}" to mapOf(
                         "attributes" to mapOf(
-                            "gen_ai.operation.name" to "invoke_agent",
+                            "gen_ai.operation.name" to OperationNameType.INVOKE_AGENT.id,
                             "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Error.id),
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
