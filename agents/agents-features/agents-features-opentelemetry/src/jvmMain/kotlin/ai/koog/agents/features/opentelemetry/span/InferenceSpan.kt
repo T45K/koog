@@ -20,8 +20,8 @@ internal class InferenceSpan(
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeId: String, content: String): String =
-            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeId), content = content)
+        fun createId(agentId: String, runId: String, nodeName: String, nodeId: String, content: String): String =
+            createIdFromParent(parentId = NodeExecuteSpan.createId(agentId, runId, nodeName, nodeId), content = content)
 
         private fun createIdFromParent(parentId: String, content: String): String =
             "$parentId.llm.${content}"//.sha256base64()}"

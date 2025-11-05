@@ -1,5 +1,6 @@
 package ai.koog.agents.features.opentelemetry.feature
 
+import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
@@ -8,9 +9,9 @@ import ai.koog.agents.core.dsl.extension.nodeLLMRequest
 import ai.koog.agents.core.dsl.extension.nodeLLMSendToolResult
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onToolCall
-import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.utils.SerializationUtils
+import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgent
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
@@ -283,7 +284,9 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                 mockLLMAnswer(mockResponse) onRequestContains "57°F"
             }
 
-            val agent = createAgent(
+            val nodeNameToIdMap = mutableMapOf<String, String>()
+
+            createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 systemPrompt = systemPrompt,
@@ -298,14 +301,24 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     addSpanExporter(mockExporter)
                     setVerbose(false)
                 }
-            }
 
-            agent.run(userPrompt)
+                install(EventHandler) {
+                    onNodeExecutionStarting { eventContext ->
+                        getNodeInfoElement()?.id?.let { nodeId -> nodeNameToIdMap[eventContext.node.name] = nodeId }
+                    }
+                }
+            }.use { agent ->
+                agent.run(userPrompt)
+            }
 
             val collectedSpans = mockExporter.collectedSpans
             assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
 
-            agent.close()
+            println("SD -- collected node ids")
+            nodeNameToIdMap.forEach { (key, value) ->
+                println("key: $key, NodeId: $value")
+            }
+            println("SD -- collected node ids")
 
             // Check Spans
 
@@ -338,7 +351,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.__finish__.\"${mockResponse}\"" to mapOf(
+                    "node.__finish__.${nodeNameToIdMap["__finish__"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "__finish__",
@@ -349,7 +362,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.test-node-llm-send-tool-result.${TestGetWeatherTool.DEFAULT_PARIS_RESULT}" to mapOf(
+                    "node.test-node-llm-send-tool-result.${nodeNameToIdMap["test-node-llm-send-tool-result"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "test-node-llm-send-tool-result",
@@ -401,7 +414,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.test-tool-call.${serializedToolCall}" to mapOf(
+                    "node.test-tool-call.${nodeNameToIdMap["test-tool-call"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "test-tool-call",
@@ -424,7 +437,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.test-llm-call.\"${userPrompt}\"" to mapOf(
+                    "node.test-llm-call.${nodeNameToIdMap["test-llm-call"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "test-llm-call",
@@ -466,7 +479,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                     )
                 ),
                 mapOf(
-                    "node.__start__.\"${userPrompt}\"" to mapOf(
+                    "node.__start__.${nodeNameToIdMap["__start__"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "koog.node.name" to "__start__",

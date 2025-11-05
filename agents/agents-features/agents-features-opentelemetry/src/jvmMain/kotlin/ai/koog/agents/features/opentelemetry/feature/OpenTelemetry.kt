@@ -185,9 +185,9 @@ public class OpenTelemetry {
                 val nodeExecuteSpan = NodeExecuteSpan(
                     parent = parentSpan,
                     runId = eventContext.context.runId,
+                    nodeId = nodeInfoElement.id,
                     nodeName = eventContext.node.name,
                     nodeInput = nodeDataToString(eventContext.input, eventContext.inputType),
-                    nodeId = nodeInfoElement.id
                 )
 
                 spanAdapter?.onBeforeSpanStarted(nodeExecuteSpan)
@@ -204,7 +204,8 @@ public class OpenTelemetry {
                 val nodeExecuteSpanId = NodeExecuteSpan.createId(
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
-                    nodeId = nodeInfoElement.id
+                    nodeId = nodeInfoElement.id,
+                    nodeName = eventContext.node.name,
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
@@ -234,6 +235,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = eventContext.node.name,
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
@@ -280,7 +282,8 @@ public class OpenTelemetry {
                 val subgraphExecuteSpanId = NodeExecuteSpan.createId(
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
-                    nodeId = nodeInfoElement.id
+                    nodeId = nodeInfoElement.id,
+                    nodeName = eventContext.subgraph.name,
                 )
 
                 val subgraphExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(subgraphExecuteSpanId)
@@ -298,7 +301,7 @@ public class OpenTelemetry {
                 spanProcessor.endSpan(subgraphExecuteSpan)
             }
 
-            pipeline.interceptNodeExecutionFailed(this) intercept@{ eventContext ->
+            pipeline.interceptSubgraphExecutionFailed(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry subgraph execution error handler" }
 
                 // Find current NodeExecuteSpan
@@ -310,6 +313,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = eventContext.subgraph.name
                 )
 
                 val subgraphExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(subgraphExecuteSpanId)
@@ -337,6 +341,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecuteSpanId)
@@ -404,6 +409,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                     content = eventContext.prompt.messages.lastOrNull()?.content ?: "",
                 )
 
@@ -487,6 +493,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                 )
 
                 val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(nodeExecutionSpanId)
@@ -514,6 +521,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                     toolName = eventContext.tool.name,
                 )
 
@@ -546,6 +554,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                     toolName = eventContext.tool.name
                 )
 
@@ -575,6 +584,7 @@ public class OpenTelemetry {
                     agentId = agentRunInfoElement.agentId,
                     runId = agentRunInfoElement.runId,
                     nodeId = nodeInfoElement.id,
+                    nodeName = nodeInfoElement.name,
                     toolName = eventContext.tool.name
                 )
 
@@ -629,9 +639,10 @@ public class OpenTelemetry {
             val parentId = nodeInfoElement.parentId ?: return null
             val agentId = agentRunInfoElement.agentId
             val runId = agentRunInfoElement.runId
+            val nodeName = nodeInfoElement.name
 
             val parentNodeExecuteSpanId = NodeExecuteSpan.createId(
-                agentId = agentId, runId = runId, nodeId = parentId
+                agentId = agentId, runId = runId, nodeName = nodeName, nodeId = parentId
             )
 
             return spanProcessor.getSpan<NodeExecuteSpan>(parentNodeExecuteSpanId)

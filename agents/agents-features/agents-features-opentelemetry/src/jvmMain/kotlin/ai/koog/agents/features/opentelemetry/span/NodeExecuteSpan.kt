@@ -13,21 +13,21 @@ import io.opentelemetry.api.trace.SpanKind
 internal class NodeExecuteSpan(
     parent: GenAIAgentSpan,
     val runId: String,
+    val nodeId: String,
     val nodeName: String,
     val nodeInput: String?,
-    val nodeId: String
 ) : GenAIAgentSpan(parent) {
 
     companion object {
         // From Invoke Agent Span
-        fun createId(agentId: String, runId: String, nodeId: String): String =
-            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeId = nodeId)
+        fun createId(agentId: String, runId: String, nodeName: String, nodeId: String): String =
+            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, nodeId = nodeId)
 
-        private fun createIdFromParent(parentId: String, nodeId: String): String =
-            "$parentId.node.$nodeId"//.sha256base64()}"
+        private fun createIdFromParent(parentId: String, nodeName: String, nodeId: String): String =
+            "$parentId.node.$nodeName.$nodeId"
     }
 
-    override val spanId: String = createIdFromParent(parent.spanId, nodeId)
+    override val spanId: String = createIdFromParent(parent.spanId, nodeName, nodeId)
 
     override val kind: SpanKind = SpanKind.INTERNAL
 

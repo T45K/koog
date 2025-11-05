@@ -1,5 +1,6 @@
 package ai.koog.agents.features.opentelemetry.feature
 
+import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
@@ -8,9 +9,9 @@ import ai.koog.agents.core.dsl.extension.nodeLLMRequest
 import ai.koog.agents.core.dsl.extension.nodeLLMSendToolResult
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onToolCall
-import ai.koog.agents.core.environment.ReceivedToolResult
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.utils.SerializationUtils
+import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgent
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgentService
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Response.FinishReasonType
@@ -232,6 +233,9 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mockLLMAnswer(mockResponse1) onRequestEquals userPrompt1
             }
 
+            val nodeNameToIdMap1 = mutableMapOf<String, String>()
+            val nodeNameToIdMap = mutableMapOf<String, String>()
+
             val agentService = createAgentService(
                 strategy = strategy,
                 promptId = promptId,
@@ -245,9 +249,17 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                     addSpanExporter(mockExporter)
                     setVerbose(true)
                 }
+
+                install(EventHandler) {
+                    onNodeExecutionStarting { eventContext ->
+                        getNodeInfoElement()?.id?.let { nodeId -> nodeNameToIdMap[eventContext.node.name] = nodeId }
+                    }
+                }
             }
 
             agentService.createAgentAndRun(userPrompt0, id = agentId)
+            nodeNameToIdMap.
+
             agentService.createAgentAndRun(userPrompt1, id = agentId)
 
             val collectedSpans = mockExporter.collectedSpans
@@ -284,7 +296,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 ),
 
                 mapOf(
-                    "node.__finish__.\"${mockResponse1}\"" to mapOf(
+                    "node.__finish__.${nodeNameToIdMap["__finish__"]}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.conversation.id" to mockExporter.runIds[1],
                             "koog.node.name" to "__finish__",
