@@ -1,4 +1,4 @@
-package ai.koog.agents.features.opentelemetry.feature
+package ai.koog.agents.features.opentelemetry.feature.span
 
 import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.annotation.InternalAgentsApi
@@ -12,9 +12,10 @@ import ai.koog.agents.core.dsl.extension.onToolCall
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.eventHandler.feature.EventHandler
-import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgent
-import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgentService
-import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Response.FinishReasonType
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI
+import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
+import ai.koog.agents.features.opentelemetry.feature.OpenTelemetry
+import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.agents.features.opentelemetry.mock.MockSpanExporter
 import ai.koog.agents.features.opentelemetry.mock.TestGetWeatherTool
 import ai.koog.agents.testing.tools.getMockExecutor
@@ -43,6 +44,79 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
         private val logger = KotlinLogging.logger { }
     }
 
+
+    object Strategies {
+        val strategy1_singleLLMCall = strategy("test-strategy") {
+            val nodeSendInput by nodeLLMRequest("test-llm-call")
+
+            edge(nodeStart forwardTo nodeSendInput)
+            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+        }
+
+
+        val strategy2_singleLLMCall = strategy("test-strategy") {
+            val nodeSendInput by nodeLLMRequest("test-llm-call")
+
+            edge(nodeStart forwardTo nodeSendInput)
+            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+        }
+
+        val strategy3_tollCall = strategy("test-strategy") {
+            val nodeSendInput by nodeLLMRequest("test-llm-call")
+            val nodeExecuteTool by nodeExecuteTool("test-tool-call")
+            val nodeSendToolResult by nodeLLMSendToolResult("test-node-llm-send-tool-result")
+
+            edge(nodeStart forwardTo nodeSendInput)
+            edge(nodeSendInput forwardTo nodeExecuteTool onToolCall { true })
+            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+            edge(nodeExecuteTool forwardTo nodeSendToolResult)
+            edge(nodeSendToolResult forwardTo nodeFinish onAssistantMessage { true })
+            edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
+        }
+
+        val strategy4_parallel = strategy("test-strategy") {
+            val nodeFirstJoke by node<String, String> { topic ->
+                "First joke about $topic: Why do programmers prefer dark mode? Because light attracts bugs!"
+            }
+
+            val nodeSecondJoke by node<String, String> { topic ->
+                "Second joke about $topic: Why do Java developers wear glasses? Because they don't C#!"
+            }
+
+            val nodeThirdJoke by node<String, String> { topic ->
+                "Third joke about $topic: A SQL query walks into a bar, walks up to two tables and asks, 'Can I join you?'"
+            }
+
+            // Define a node to run joke generation in parallel
+            val nodeGenerateJokes by parallel(
+                nodeFirstJoke,
+                nodeSecondJoke,
+                nodeThirdJoke
+            ) {
+                selectByIndex {
+                    // Always select the first joke for testing purposes
+                    0
+                }
+            }
+
+            edge(nodeStart forwardTo nodeGenerateJokes)
+            edge(nodeGenerateJokes forwardTo nodeFinish)
+        }
+
+        val nodeWithErrorName = "node-with-error"
+        val testErrorMessage = "Test error"
+        val strategy5_error = strategy("test-strategy") {
+            val nodeWithError by node<String, String>(nodeWithErrorName) {
+                throw IllegalStateException(testErrorMessage)
+            }
+
+            edge(nodeStart forwardTo nodeWithError)
+            edge(nodeWithError forwardTo nodeFinish)
+        }
+    }
+
+
+
     @Test
     fun `test spans are created for agent with one llm call`() = runTest {
         MockSpanExporter().use { mockExporter ->
@@ -68,7 +142,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mockLLMAnswer(mockResponse) onRequestEquals userPrompt
             }
 
-            createAgent(
+            OpenTelemetryTestAPI.createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 promptId = promptId,
@@ -78,7 +152,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 clock = testClock,
                 temperature = temperature
             ) {
-                install(OpenTelemetry) {
+                install(OpenTelemetry.Feature) {
                     addSpanExporter(mockExporter)
                     setVerbose(true)
                 }
@@ -157,7 +231,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "gen_ai.request.temperature" to temperature,
                             "gen_ai.request.model" to model.id,
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id)
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id)
                         ),
                         "events" to mapOf(
                             "gen_ai.user.message" to mapOf(
@@ -236,7 +310,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
             val nodeNameToIdMap1 = mutableMapOf<String, String>()
             val nodeNameToIdMap = mutableMapOf<String, String>()
 
-            val agentService = createAgentService(
+            val agentService = OpenTelemetryTestAPI.createAgentService(
                 strategy = strategy,
                 promptId = promptId,
                 systemPrompt = systemPrompt,
@@ -245,12 +319,12 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 clock = testClock,
                 temperature = temperature
             ) {
-                install(OpenTelemetry) {
+                install(OpenTelemetry.Feature) {
                     addSpanExporter(mockExporter)
                     setVerbose(true)
                 }
 
-                install(EventHandler) {
+                install(EventHandler.Feature) {
                     onNodeExecutionStarting { eventContext ->
                         getNodeInfoElement()?.id?.let { nodeId -> nodeNameToIdMap[eventContext.node.name] = nodeId }
                     }
@@ -258,7 +332,6 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
             }
 
             agentService.createAgentAndRun(userPrompt0, id = agentId)
-            nodeNameToIdMap.
 
             agentService.createAgentAndRun(userPrompt1, id = agentId)
 
@@ -336,7 +409,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.conversation.id" to mockExporter.runIds[1],
                             "gen_ai.request.temperature" to temperature,
                             "gen_ai.request.model" to model.id,
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id),
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id),
                         ),
                         "events" to mapOf(
                             "gen_ai.system.message" to mapOf(
@@ -424,7 +497,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.conversation.id" to mockExporter.runIds[0],
                             "gen_ai.request.temperature" to temperature,
                             "gen_ai.request.model" to model.id,
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id),
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id),
                         ),
                         "events" to mapOf(
                             "gen_ai.system.message" to mapOf(
@@ -489,18 +562,22 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
             }
 
-            val toolRegistry = ToolRegistry {
+            val toolRegistry = ToolRegistry.Companion {
                 tool(TestGetWeatherTool)
             }
 
             val toolCallId = "tool-call-id"
 
             val mockExecutor = getMockExecutor(clock = testClock) {
-                mockLLMToolCall(tool = TestGetWeatherTool, args = TestGetWeatherTool.Args("Paris"), toolCallId = toolCallId) onRequestEquals userPrompt
+                mockLLMToolCall(
+                    tool = TestGetWeatherTool,
+                    args = TestGetWeatherTool.Args("Paris"),
+                    toolCallId = toolCallId
+                ) onRequestEquals userPrompt
                 mockLLMAnswer(mockResponse) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
             }
 
-            createAgent(
+            OpenTelemetryTestAPI.createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 promptId = promptId,
@@ -511,7 +588,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 clock = testClock,
                 temperature = temperature
             ) {
-                install(OpenTelemetry) {
+                install(OpenTelemetry.Feature) {
                     addSpanExporter(mockExporter)
                     setVerbose(true)
                 }
@@ -524,27 +601,29 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
 
             // Check Spans
 
-            fun getWeatherInParisCallSerialized(dataType: KType = typeOf<Message.Tool.Call>()) = @OptIn(InternalAgentsApi::class) SerializationUtils.encodeDataToStringOrDefault(
-                data = Message.Tool.Call(
-                    id = toolCallId,
-                    tool = TestGetWeatherTool.name,
-                    content = "{\"location\":\"Paris\"}",
-                    metaInfo = ResponseMetaInfo(
-                        timestamp = testClock.now()
-                    )
-                ),
-                dataType = dataType
-            )
+            fun getWeatherInParisCallSerialized(dataType: KType = typeOf<Message.Tool.Call>()) =
+                @OptIn(InternalAgentsApi::class) SerializationUtils.encodeDataToStringOrDefault(
+                    data = Message.Tool.Call(
+                        id = toolCallId,
+                        tool = TestGetWeatherTool.name,
+                        content = "{\"location\":\"Paris\"}",
+                        metaInfo = ResponseMetaInfo(
+                            timestamp = testClock.now()
+                        )
+                    ),
+                    dataType = dataType
+                )
 
-            fun responseOutputSerialized() = @OptIn(InternalAgentsApi::class) SerializationUtils.encodeDataToStringOrDefault(
-                data = Message.Assistant(
-                    content = mockResponse,
-                    metaInfo = ResponseMetaInfo(
-                        timestamp = testClock.now()
-                    )
-                ),
-                dataType = typeOf<Message>()
-            )
+            fun responseOutputSerialized() =
+                @OptIn(InternalAgentsApi::class) SerializationUtils.encodeDataToStringOrDefault(
+                    data = Message.Assistant(
+                        content = mockResponse,
+                        metaInfo = ResponseMetaInfo(
+                            timestamp = testClock.now()
+                        )
+                    ),
+                    dataType = typeOf<Message>()
+                )
 
             val expectedSpans = listOf(
                 mapOf(
@@ -599,7 +678,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "gen_ai.operation.name" to "chat",
                             "gen_ai.request.temperature" to temperature,
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id),
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Stop.id),
                         ),
                         "events" to mapOf(
                             "gen_ai.system.message" to mapOf(
@@ -616,7 +695,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                                 "gen_ai.system" to model.provider.id,
                                 "role" to Message.Role.Tool.name.lowercase(),
                                 "tool_calls" to """[{"function":{"name":"${TestGetWeatherTool.name}","arguments":"{\"location\":\"Paris\"}"},"id":"$toolCallId","type":"function"}]""",
-                                "finish_reason" to FinishReasonType.ToolCalls.id,
+                                "finish_reason" to SpanAttributes.Response.FinishReasonType.ToolCalls.id,
                             ),
                             "gen_ai.tool.message" to mapOf(
                                 "gen_ai.system" to model.provider.id,
@@ -674,7 +753,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                             "gen_ai.conversation.id" to mockExporter.lastRunId,
                             "gen_ai.operation.name" to "chat",
                             "gen_ai.request.temperature" to temperature,
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.ToolCalls.id),
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.ToolCalls.id),
                         ),
                         "events" to mapOf(
                             "gen_ai.system.message" to mapOf(
@@ -692,7 +771,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                                 "index" to 0L,
                                 "role" to Message.Role.Tool.name.lowercase(),
                                 "tool_calls" to """[{"function":{"name":"${TestGetWeatherTool.name}","arguments":"{\"location\":\"Paris\"}"},"id":"$toolCallId","type":"function"}]""",
-                                "finish_reason" to FinishReasonType.ToolCalls.id,
+                                "finish_reason" to SpanAttributes.Response.FinishReasonType.ToolCalls.id,
                             ),
                         )
                     )
@@ -759,7 +838,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 mockLLMAnswer(mockResponse) onRequestEquals userPrompt
             }
 
-            val agent = createAgent(
+            val agent = OpenTelemetryTestAPI.createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 promptId = promptId,
@@ -768,7 +847,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 clock = testClock,
                 temperature = temperature
             ) {
-                install(OpenTelemetry) {
+                install(OpenTelemetry.Feature) {
                     addSpanExporter(mockExporter)
                     setVerbose(true)
                 }
@@ -817,11 +896,11 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
             // Verify parallel node spans have the correct conversation ID
             val parallelNodeSpans = collectedSpans.filter {
                 it.name.startsWith("node.") &&
-                    (
-                        it.name.contains("nodeFirstJoke") ||
-                            it.name.contains("nodeSecondJoke") ||
-                            it.name.contains("nodeThirdJoke")
-                        )
+                        (
+                                it.name.contains("nodeFirstJoke") ||
+                                        it.name.contains("nodeSecondJoke") ||
+                                        it.name.contains("nodeThirdJoke")
+                                )
             }
 
             assertEquals(3, parallelNodeSpans.size, "Should have 3 parallel node spans")
@@ -862,7 +941,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 edge(nodeWithError forwardTo nodeFinish)
             }
 
-            createAgent(
+            OpenTelemetryTestAPI.createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 promptId = promptId,
@@ -870,7 +949,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                 clock = testClock,
                 temperature = temperature
             ) {
-                install(OpenTelemetry) {
+                install(OpenTelemetry.Feature) {
                     setVerbose(true)
                     addSpanExporter(mockExporter)
                 }
@@ -902,7 +981,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
                     "run.${mockExporter.lastRunId}" to mapOf(
                         "attributes" to mapOf(
                             "gen_ai.operation.name" to "invoke_agent",
-                            "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Error.id),
+                            "gen_ai.response.finish_reasons" to listOf(SpanAttributes.Response.FinishReasonType.Error.id),
                             "gen_ai.system" to model.provider.id,
                             "gen_ai.agent.id" to agentId,
                             "gen_ai.conversation.id" to mockExporter.lastRunId
@@ -937,5 +1016,22 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
 
             assertSpans(expectedSpans, mockExporter.collectedSpans)
         }
+    }
+
+    //region Create Agent Span
+    //endregion Create Agent Span
+
+    //region Inference Span
+    //endregion Inference Span
+
+    //region Node Execute Span
+    //endregion Node Execute Span
+
+    //region Execute Tool Span
+    //endregion Execute Tool Span
+
+
+    private suspend fun runAgentWithTools() {
+
     }
 }

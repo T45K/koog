@@ -12,7 +12,9 @@ import ai.koog.agents.core.dsl.extension.onToolCall
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.eventHandler.feature.EventHandler
+import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createAgent
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.createCustomSdk
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Response.FinishReasonType
@@ -314,18 +316,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
             val collectedSpans = mockExporter.collectedSpans
             assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
 
-            println("SD -- collected node ids")
-            nodeNameToIdMap.forEach { (key, value) ->
-                println("key: $key, NodeId: $value")
-            }
-            println("SD -- collected node ids")
-
             // Check Spans
-
-            val serializedToolCall = @OptIn(InternalAgentsApi::class) SerializationUtils.encodeDataToStringOrDefault(
-                data = toolCallMessage(id = toolCallId, name = TestGetWeatherTool.name, content = "{\"location\":\"Paris\"}"),
-                dataType = typeOf<Message.Tool.Call>()
-            )
 
             val expectedSpans = listOf(
                 mapOf(

@@ -5,8 +5,10 @@ import ai.koog.agents.core.agent.AIAgentService
 import ai.koog.agents.core.agent.GraphAIAgent
 import ai.koog.agents.core.agent.GraphAIAgentService
 import ai.koog.agents.core.agent.config.AIAgentConfig
+import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.entity.AIAgentGraphStrategy
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.features.eventHandler.feature.EventHandler
 import ai.koog.agents.testing.tools.getMockExecutor
 import ai.koog.prompt.dsl.prompt
 import ai.koog.prompt.executor.clients.openai.OpenAIModels
@@ -14,10 +16,30 @@ import ai.koog.prompt.executor.model.PromptExecutor
 import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.params.LLMParams
 import kotlinx.datetime.Clock
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 internal object OpenTelemetryTestAPI {
+
+    //region Run Agents With Strategies
+
+    internal suspend fun createAgentWithSingleLLMCallStrategy(): String {
+
+    }
+
+    internal suspend fun runAgentWithToolCallStrategy(): String {
+
+    }
+
+    internal suspend fun runAgentWithErrorStrategy(): String {
+
+    }
+
+    internal suspend fun runAgentWithParallelToolCallStrategy(): String {
+
+    }
+
+    //endregion Run Agents With Strategies
+
+    //region Agents
 
     internal suspend fun createAgent(
         agentId: String = "test-agent-id",
@@ -33,20 +55,24 @@ internal object OpenTelemetryTestAPI {
         userPrompt: String? = null,
         assistantPrompt: String? = null,
         installFeatures: GraphAIAgent.FeatureContext.() -> Unit = { }
-    ): AIAgent<String, String> = createAgentService(
-        strategy,
-        promptId,
-        promptExecutor,
-        toolRegistry,
-        model,
-        clock,
-        temperature,
-        maxTokens,
-        systemPrompt,
-        userPrompt,
-        assistantPrompt,
-        installFeatures
-    ).createAgent(id = agentId, clock = clock)
+    ): AIAgent<String, String> {
+        val agentService = createAgentService(
+            strategy,
+            promptId,
+            promptExecutor,
+            toolRegistry,
+            model,
+            clock,
+            temperature,
+            maxTokens,
+            systemPrompt,
+            userPrompt,
+            assistantPrompt,
+            installFeatures
+        )
+
+        return agentService.createAgent(id = agentId, clock = clock)
+    }
 
     internal fun createAgentService(
         strategy: AIAgentGraphStrategy<String, String>,
@@ -88,18 +114,19 @@ internal object OpenTelemetryTestAPI {
         )
     }
 
-    fun assertMapsEqual(expected: Map<*, *>, actual: Map<*, *>, message: String = "") {
-        assertEquals(expected.size, actual.size, "$message - Map sizes should be equal")
+    //endregion Agents
 
-        expected.forEach { (key, value) ->
-            assertTrue(actual.containsKey(key), "$message - Key '$key' should exist in actual map")
+    //region Features
 
-            val actualValue = actual[key]
-            assertEquals(
-                value,
-                actualValue,
-                "$message - Value for key '$key' should match. " + "Expected: <$value: ${value?.javaClass?.simpleName}>, " + "Actual: <$actualValue: ${actualValue?.javaClass?.simpleName}>."
-            )
+    internal fun GraphAIAgent.FeatureContext.installNodeIdsCollector(): MutableMap<String, String> {
+        val nodeNameToIdMap = mutableMapOf<String, String>()
+        install(EventHandler.Feature) {
+            onNodeExecutionStarting { eventContext ->
+                getNodeInfoElement()?.id?.let { nodeId -> nodeNameToIdMap[eventContext.node.name] = nodeId }
+            }
         }
+        return nodeNameToIdMap
     }
+
+    //endregion Features
 }
