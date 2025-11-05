@@ -38,9 +38,17 @@ internal object OpenTelemetryTestAPI {
         val agentId: String,
         val runId: String,
         val model: LLModel,
+        val temperature: Double,
+        val userPrompt: String,
+        val systemPrompt: String,
+        val result: String,
         val collectedSpans: List<SpanData>,
         val collectedNodeIds: List<NodeInfo>
-    )
+    ) {
+        fun filterNodeInfoByName(nodeName: String): List<NodeInfo> = collectedNodeIds.filter { it.nodeName == nodeName }
+        fun singleNodeInfoByName(nodeName: String): NodeInfo = collectedNodeIds.single { it.nodeName == nodeName }
+        fun singleNodeIdByName(nodeName: String): String = singleNodeInfoByName(nodeName).nodeId
+    }
 
     internal val testClock: Clock = object : Clock {
         override fun now(): Instant = Instant.parse("2023-01-01T00:00:00Z")
@@ -49,6 +57,7 @@ internal object OpenTelemetryTestAPI {
     //region Run Agents With Strategies
 
     internal suspend fun createAgentWithSingleLLMCallStrategy(
+        executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
 
@@ -59,10 +68,11 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
         }
 
-        return runAgentWithStrategy(strategy, filter)
+        return runAgentWithStrategy(strategy, executor, filter)
     }
 
     internal suspend fun runAgentWithToolCallStrategy(
+        executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
         val strategy = strategy("test-tool-calls-strategy") {
@@ -78,10 +88,11 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
         }
 
-        return runAgentWithStrategy(strategy, filter)
+        return runAgentWithStrategy(strategy, executor, filter)
     }
 
     internal suspend fun runAgentWithErrorStrategy(
+        executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
         val strategy = strategy("test-error-strategy") {
@@ -93,10 +104,11 @@ internal object OpenTelemetryTestAPI {
             edge(nodeWithError forwardTo nodeFinish)
         }
 
-        return runAgentWithStrategy(strategy, filter)
+        return runAgentWithStrategy(strategy, executor, filter)
     }
 
     internal suspend fun runAgentWithParallelToolCallStrategy(
+        executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
         val strategy = strategy("test-parallel-strategy") {
@@ -128,11 +140,12 @@ internal object OpenTelemetryTestAPI {
             edge(nodeGenerateJokes forwardTo nodeFinish)
         }
 
-        return runAgentWithStrategy(strategy, filter)
+        return runAgentWithStrategy(strategy, executor, filter)
     }
 
     internal suspend fun runAgentWithStrategy(
         strategy: AIAgentGraphStrategy<String, String>,
+        executor: PromptExecutor? = null,
         filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
 
@@ -144,10 +157,10 @@ internal object OpenTelemetryTestAPI {
         val model = OpenAIModels.Chat.GPT4o
         val temperature = 0.4
 
-        val mockResponse = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
+        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
 
-        val mockExecutor = getMockExecutor(clock = testClock) {
-            mockLLMAnswer(mockResponse) onRequestEquals userPrompt
+        val mockExecutor = executor ?: getMockExecutor(clock = testClock) {
+            mockLLMAnswer(llmResult) onRequestEquals userPrompt
         }
 
         var nodesInfo: List<NodeInfo> = emptyList()
@@ -156,11 +169,10 @@ internal object OpenTelemetryTestAPI {
             createAgent(
                 agentId = agentId,
                 strategy = strategy,
+                executor = mockExecutor,
                 promptId = promptId,
                 systemPrompt = systemPrompt,
-                promptExecutor = mockExecutor,
                 model = model,
-                clock = testClock,
                 temperature = temperature
             ) {
                 install(OpenTelemetry) {
@@ -177,6 +189,10 @@ internal object OpenTelemetryTestAPI {
                 agentId = agentId,
                 runId = mockExporter.lastRunId,
                 model = model,
+                temperature = temperature,
+                userPrompt = userPrompt,
+                systemPrompt = systemPrompt,
+                result = llmResult,
                 collectedSpans = mockExporter.collectedSpans,
                 collectedNodeIds = nodesInfo
             )
@@ -190,11 +206,10 @@ internal object OpenTelemetryTestAPI {
     internal suspend fun createAgent(
         agentId: String = "test-agent-id",
         strategy: AIAgentGraphStrategy<String, String>,
+        executor: PromptExecutor? = null,
         promptId: String? = null,
-        promptExecutor: PromptExecutor? = null,
         toolRegistry: ToolRegistry? = null,
         model: LLModel? = null,
-        clock: Clock = Clock.System,
         temperature: Double? = 0.0,
         maxTokens: Int? = null,
         systemPrompt: String? = null,
@@ -204,11 +219,10 @@ internal object OpenTelemetryTestAPI {
     ): AIAgent<String, String> {
         val agentService = createAgentService(
             strategy,
+            executor,
             promptId,
-            promptExecutor,
             toolRegistry,
             model,
-            clock,
             temperature,
             maxTokens,
             systemPrompt,
@@ -217,16 +231,15 @@ internal object OpenTelemetryTestAPI {
             installFeatures
         )
 
-        return agentService.createAgent(id = agentId, clock = clock)
+        return agentService.createAgent(id = agentId)
     }
 
     internal fun createAgentService(
         strategy: AIAgentGraphStrategy<String, String>,
+        executor: PromptExecutor? = null,
         promptId: String? = null,
-        promptExecutor: PromptExecutor? = null,
         toolRegistry: ToolRegistry? = null,
         model: LLModel? = null,
-        clock: Clock = Clock.System,
         temperature: Double? = 0.0,
         maxTokens: Int? = null,
         systemPrompt: String? = null,
@@ -237,7 +250,7 @@ internal object OpenTelemetryTestAPI {
         val agentConfig = AIAgentConfig(
             prompt = prompt(
                 id = promptId ?: "Test prompt",
-                clock = clock,
+                clock = testClock,
                 params = LLMParams(
                     temperature = temperature,
                     maxTokens = maxTokens
@@ -252,7 +265,7 @@ internal object OpenTelemetryTestAPI {
         )
 
         return AIAgentService(
-            promptExecutor = promptExecutor ?: getMockExecutor {},
+            promptExecutor = executor ?: getMockExecutor { },
             strategy = strategy,
             agentConfig = agentConfig,
             toolRegistry = toolRegistry ?: ToolRegistry { },
@@ -273,7 +286,7 @@ internal object OpenTelemetryTestAPI {
                 }
             }
         }
-        return nodesInfo.toList()
+        return nodesInfo
     }
 
     //endregion Features

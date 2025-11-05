@@ -37,6 +37,9 @@ internal class ExecuteToolSpan(
      * - gen_ai.tool.name (recommended)
      */
     init {
+        // gen_ai.operation.name
+        addAttribute(SpanAttributes.Operation.Name(SpanAttributes.Operation.OperationNameType.EXECUTE_TOOL))
+
         // gen_ai.tool.description
         addAttribute(SpanAttributes.Tool.Description(description = tool.descriptor.description))
 

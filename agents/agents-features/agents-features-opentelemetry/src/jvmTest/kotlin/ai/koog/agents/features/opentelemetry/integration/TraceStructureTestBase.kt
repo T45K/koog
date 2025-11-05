@@ -491,9 +491,8 @@ abstract class TraceStructureTestBase(private val openTelemetryConfigurator: Ope
                 strategy = strategy,
                 promptId = promptId,
                 systemPrompt = systemPrompt,
-                promptExecutor = mockExecutor,
+                executor = mockExecutor,
                 model = model,
-                clock = testClock,
                 temperature = temperature,
             ) {
                 install(OpenTelemetry) {
@@ -903,15 +902,13 @@ abstract class TraceStructureTestBase(private val openTelemetryConfigurator: Ope
     ) {
         val agentId = "test-agent-id"
         val promptId = "test-prompt-id"
-        val testClock = Clock.System
 
         createAgent(
             agentId = agentId,
             strategy = strategy,
             promptId = promptId,
-            promptExecutor = promptExecutor,
+            executor = promptExecutor,
             model = model,
-            clock = testClock,
             temperature = temperature,
             maxTokens = maxTokens,
             systemPrompt = systemPrompt,

@@ -42,21 +42,16 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
 
     @Test
     fun `test Open Telemetry feature default configuration`() = runTest {
-        val strategy = strategy("test-strategy") {
-            val nodeSendInput by nodeLLMRequest("test-llm-call")
 
-            edge(nodeStart forwardTo nodeSendInput)
-            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+        val strategy = strategy<String, String>("test-strategy") {
+            nodeStart then nodeFinish
         }
 
         var actualServiceName: String? = null
         var actualServiceVersion: String? = null
         var actualIsVerbose: Boolean? = null
 
-        createAgent(
-            strategy = strategy,
-            clock = testClock,
-        ) {
+        createAgent(strategy = strategy) {
             install(OpenTelemetry) {
                 actualServiceName = serviceName
                 actualServiceVersion = serviceVersion
@@ -73,12 +68,9 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
     }
 
     @Test
-    fun `test Open Telemetry feature custom configuration`() = runTest {
-        val strategy = strategy("test-strategy") {
-            val nodeSendInput by nodeLLMRequest("test-llm-call")
-
-            edge(nodeStart forwardTo nodeSendInput)
-            edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
+    fun `test custom configuration is applied`() = runTest {
+        val strategy = strategy<String, String>("test-strategy") {
+            nodeStart then nodeFinish
         }
 
         val expectedServiceName = "test-service-name"
@@ -89,10 +81,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
         var actualServiceVersion: String? = null
         var actualIsVerbose: Boolean? = null
 
-        createAgent(
-            strategy = strategy,
-            clock = testClock,
-        ) {
+        createAgent(strategy = strategy) {
             install(OpenTelemetry) {
                 setServiceInfo(expectedServiceName, expectedServiceVersion)
                 setVerbose(expectedIsVerbose)
@@ -154,7 +143,7 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
             val expectedSdk = createCustomSdk(mockExporter)
 
             val agent = createAgent(
-                promptExecutor = mockExecutor,
+                executor = mockExecutor,
                 strategy = strategy,
             ) {
                 install(OpenTelemetry) {
@@ -210,9 +199,8 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                 agentId = agentId,
                 strategy = strategy,
                 promptId = promptId,
-                promptExecutor = mockExecutor,
+                executor = mockExecutor,
                 model = model,
-                clock = testClock,
             ) {
                 install(OpenTelemetry) {
                     addSpanExporter(mockExporter)
@@ -296,9 +284,8 @@ class OpenTelemetryConfigTest : OpenTelemetryTestBase() {
                 systemPrompt = systemPrompt,
                 promptId = promptId,
                 toolRegistry = toolRegistry,
-                promptExecutor = mockExecutor,
+                executor = mockExecutor,
                 model = model,
-                clock = testClock,
                 temperature = temperature
             ) {
                 install(OpenTelemetry) {

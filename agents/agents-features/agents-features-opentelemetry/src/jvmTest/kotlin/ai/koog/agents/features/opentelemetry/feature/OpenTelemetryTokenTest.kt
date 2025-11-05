@@ -77,9 +77,8 @@ class OpenTelemetryTokenTest : OpenTelemetryTestBase() {
                 promptId = promptId,
                 systemPrompt = systemPrompt,
                 toolRegistry = toolRegistry,
-                promptExecutor = mockExecutor,
+                executor = mockExecutor,
                 model = model,
-                clock = testClock,
                 temperature = temperature,
                 maxTokens = maxTokens,
             ) {
