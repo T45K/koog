@@ -1,12 +1,9 @@
 package ai.koog.agents.features.opentelemetry.span
 
-import ai.koog.agents.core.agent.context.AIAgentGraphContextBase
 import ai.koog.agents.features.opentelemetry.attribute.CustomAttribute
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
-import ai.koog.agents.features.opentelemetry.span.CryptographyUtil.sha256base64
 import ai.koog.agents.utils.HiddenString
 import io.opentelemetry.api.trace.SpanKind
-import kotlinx.serialization.json.JsonElement
 
 /**
  * Node Execute Span
@@ -14,22 +11,23 @@ import kotlinx.serialization.json.JsonElement
  * Note: This span is out of scope of Open Telemetry Semantic Convention for GenAI.
  */
 internal class NodeExecuteSpan(
-    parent: InvokeAgentSpan,
+    parent: GenAIAgentSpan,
     val runId: String,
     val nodeName: String,
     val nodeInput: String?,
-    val agentContext: AIAgentGraphContextBase,
+    val nodeId: String
 ) : GenAIAgentSpan(parent) {
 
     companion object {
-        fun createId(agentId: String, runId: String, nodeName: String, agentContext: AIAgentGraphContextBase): String =
-            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeName = nodeName, agentContext = agentContext)
+        // From Invoke Agent Span
+        fun createId(agentId: String, runId: String, nodeId: String): String =
+            createIdFromParent(parentId = InvokeAgentSpan.createId(agentId, runId), nodeId = nodeId)
 
-        private fun createIdFromParent(parentId: String, nodeName: String, agentContext: AIAgentGraphContextBase): String =
-            "$parentId.node.$nodeName.${agentContext.hashCode()}"//.sha256base64()}"
+        private fun createIdFromParent(parentId: String, nodeId: String): String =
+            "$parentId.node.$nodeId"//.sha256base64()}"
     }
 
-    override val spanId: String = createIdFromParent(parent.spanId, nodeName, agentContext)
+    override val spanId: String = createIdFromParent(parent.spanId, nodeId)
 
     override val kind: SpanKind = SpanKind.INTERNAL
 

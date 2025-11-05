@@ -1,9 +1,10 @@
 package ai.koog.agents.core.agent.entity
 
 import ai.koog.agents.core.agent.context.AIAgentContext
-import ai.koog.agents.core.agent.context.AIAgentGraphContext
 import ai.koog.agents.core.agent.context.AIAgentGraphContextBase
 import ai.koog.agents.core.agent.context.DetachedPromptExecutorAPI
+import ai.koog.agents.core.agent.context.element.NodeInfoContextElement
+import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.context.getAgentContextData
 import ai.koog.agents.core.agent.context.store
 import ai.koog.agents.core.agent.exception.AIAgentMaxNumberOfIterationsReachedException
@@ -21,9 +22,11 @@ import ai.koog.prompt.structure.StructuredOutputConfig
 import ai.koog.prompt.structure.json.JsonStructuredData
 import ai.koog.prompt.structure.json.generator.StandardJsonSchemaGenerator
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.util.caseInsensitiveMap
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlin.reflect.KType
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * [AIAgentSubgraph] represents a structured subgraph within an AI agent workflow. It serves as a logical
@@ -151,53 +154,54 @@ public open class AIAgentSubgraph<TInput, TOutput>(
      * @param input The input object representing the data to be processed by the AI agent.
      * @return The output of the AI agent execution, generated after processing the input.
      */
-    @OptIn(InternalAgentsApi::class, DetachedPromptExecutorAPI::class)
-    override suspend fun execute(context: AIAgentGraphContextBase, input: TInput): TOutput? {
-        val newTools = selectTools(context)
+    @OptIn(InternalAgentsApi::class, DetachedPromptExecutorAPI::class, ExperimentalUuidApi::class)
+    override suspend fun execute(context: AIAgentGraphContextBase, input: TInput): TOutput? =
+        withContext(NodeInfoContextElement(Uuid.random().toString(), getNodeInfoElement()?.id, name, input, inputType)) {
+            val newTools = selectTools(context)
 
-        // Copy inner context with new tools, model and LLM params.
-        val innerContext = with(context) {
-            copy(
-                llm = llm.copy(
-                    tools = newTools,
-                    model = llmModel ?: llm.model,
-                    prompt = llm.prompt.copy(params = llmParams ?: llm.prompt.params)
+            // Copy inner context with new tools, model and LLM params.
+            val innerContext = with(context) {
+                copy(
+                    llm = llm.copy(
+                        tools = newTools,
+                        model = llmModel ?: llm.model,
+                        prompt = llm.prompt.copy(params = llmParams ?: llm.prompt.params)
+                    )
                 )
-            )
-        }
-
-        runInNonRootContext(context) {
-            pipeline.onSubgraphExecutionStarting(this@AIAgentSubgraph, innerContext, input, inputType)
-        }
-
-        // Execute the subgraph with an inner context and get the result and updated prompt.
-        val result = try {
-            executeWithInnerContext(innerContext, input)
-        } catch (t: Throwable) {
-            runInNonRootContext(context) {
-                pipeline.onSubgraphExecutionFailed(this@AIAgentSubgraph, context, input, inputType, t)
             }
-            throw t
+
+            runInNonRootContext(context) {
+                pipeline.onSubgraphExecutionStarting(this@AIAgentSubgraph, innerContext, input, inputType)
+            }
+
+            // Execute the subgraph with an inner context and get the result and updated prompt.
+            val result = try {
+                executeWithInnerContext(innerContext, input)
+            } catch (t: Throwable) {
+                runInNonRootContext(context) {
+                    pipeline.onSubgraphExecutionFailed(this@AIAgentSubgraph, context, input, inputType, t)
+                }
+                throw t
+            }
+
+            // Restore original LLM params on the new prompt.
+            val newPrompt = innerContext.llm.readSession {
+                prompt.copy(params = context.llm.prompt.params)
+            }
+            context.llm.writeSession { prompt = newPrompt }
+
+            val innerForcedData = innerContext.getAgentContextData()
+
+            if (innerForcedData != null) {
+                context.store(innerForcedData)
+            }
+
+            runInNonRootContext(context) {
+                pipeline.onSubgraphExecutionCompleted(this@AIAgentSubgraph, innerContext, input, inputType, result, outputType)
+            }
+
+            result
         }
-
-        // Restore original LLM params on the new prompt.
-        val newPrompt = innerContext.llm.readSession {
-            prompt.copy(params = context.llm.prompt.params)
-        }
-        context.llm.writeSession { prompt = newPrompt }
-
-        val innerForcedData = innerContext.getAgentContextData()
-
-        if (innerForcedData != null) {
-            context.store(innerForcedData)
-        }
-
-        runInNonRootContext(context) {
-            pipeline.onSubgraphExecutionCompleted(this@AIAgentSubgraph, innerContext, input, inputType, result, outputType)
-        }
-
-        return result
-    }
 
     @OptIn(InternalAgentsApi::class)
     private suspend fun executeWithInnerContext(context: AIAgentGraphContextBase, initialInput: TInput): TOutput? {

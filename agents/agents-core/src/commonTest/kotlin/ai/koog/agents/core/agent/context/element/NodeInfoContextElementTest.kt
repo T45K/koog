@@ -23,9 +23,9 @@ class NodeInfoContextElementTest {
         val nodeInput = "test-input"
         val nodeInputType = typeOf<String>()
 
-        val element = NodeInfoContextElement(nodeName = nodeName, input = nodeInput, inputType = nodeInputType)
+        val element = NodeInfoContextElement(name = nodeName, input = nodeInput, inputType = nodeInputType)
 
-        assertEquals(nodeName, element.nodeName)
+        assertEquals(nodeName, element.name)
         assertEquals(NodeInfoContextElement.Key, element.key)
         assertEquals(nodeInput, element.input)
         assertEquals(nodeInputType, element.inputType)
@@ -33,9 +33,9 @@ class NodeInfoContextElementTest {
 
     @Test
     fun testContextElementEquality() {
-        val element1 = NodeInfoContextElement(nodeName = "node1", input = "input1", inputType = typeOf<String>())
-        val element2 = NodeInfoContextElement(nodeName = "node1", input = "input1", inputType = typeOf<String>())
-        val element3 = NodeInfoContextElement(nodeName = "node2", input = "input2", inputType = typeOf<String>())
+        val element1 = NodeInfoContextElement(name = "node1", input = "input1", inputType = typeOf<String>())
+        val element2 = NodeInfoContextElement(name = "node1", input = "input1", inputType = typeOf<String>())
+        val element3 = NodeInfoContextElement(name = "node2", input = "input2", inputType = typeOf<String>())
 
         assertEquals(element1, element2)
         assertEquals(element1.hashCode(), element2.hashCode())
@@ -44,7 +44,7 @@ class NodeInfoContextElementTest {
 
     @Test
     fun testGetNodeInfoElement() = runTest {
-        val element = NodeInfoContextElement(nodeName = nodeName, input = "input", inputType = typeOf<String>())
+        val element = NodeInfoContextElement(name = nodeName, input = "input", inputType = typeOf<String>())
 
         // Test with an element in context
         withContext(element) {
@@ -60,7 +60,7 @@ class NodeInfoContextElementTest {
 
     @Test
     fun testMultipleElementsInContext() = runTest {
-        val nodeElement = NodeInfoContextElement(nodeName = nodeName, input = "input", inputType = typeOf<String>())
+        val nodeElement = NodeInfoContextElement(name = nodeName, input = "input", inputType = typeOf<String>())
         val testPrompt = prompt("test-prompt") {}
         val testModel = OllamaModels.Meta.LLAMA_3_2
 
