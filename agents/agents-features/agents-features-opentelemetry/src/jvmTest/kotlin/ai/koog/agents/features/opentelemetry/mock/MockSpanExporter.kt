@@ -7,13 +7,15 @@ import io.opentelemetry.sdk.trace.export.SpanExporter
 /**
  * A mock span exporter that captures spans created by the OpenTelemetry feature.
  * This allows us to inject a MockTracer into the OpenTelemetry feature.
+ *
+ * @param filter a function that determines whether a given span should be exported. Defaults to exporting all spans.
  */
-class MockSpanExporter() : SpanExporter {
+internal class MockSpanExporter(val filter: (SpanData) -> Boolean = { true }) : SpanExporter {
 
     private val _collectedSpans = mutableListOf<SpanData>()
 
     val collectedSpans: List<SpanData>
-        get() = _collectedSpans
+        get() = _collectedSpans.filter(filter)
 
     private val _runIds = mutableListOf<String>()
 
