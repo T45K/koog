@@ -16,6 +16,12 @@ import ai.koog.prompt.structure.StructuredResponse
 import ai.koog.prompt.structure.annotations.InternalStructuredOutputApi
 import ai.koog.prompt.structure.json.JsonStructuredData
 import ai.koog.prompt.structure.json.generator.StandardJsonSchemaGenerator
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.equals.shouldBeEqual
+import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldNotBeBlank
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.KSerializer
@@ -26,9 +32,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 object TestUtils {
     fun readTestAnthropicKeyFromEnv(): String {
@@ -664,18 +667,13 @@ object TestUtils {
 
         fun checkResponse(result: Result<StructuredResponse<WeatherReport>>) {
             val response = result.getOrThrow().structure
-            assertNotNull(response)
+            response.shouldNotBe(null)
 
-            assertEquals("London", response.city, "City should be London, got: ${response.city}")
-            assertTrue(
-                response.temperature in -50..60,
-                "Temperature should be realistic, got: ${response.temperature}"
-            )
-            assertTrue(response.description.isNotBlank(), "Description should not be empty")
-            assertTrue(
-                response.humidity >= 0,
-                "Humidity should be a valid percentage, got: ${response.humidity}"
-            )
+            response.city shouldBeEqual "London"
+            response.temperature shouldBeLessThanOrEqual 60
+            response.temperature shouldBeGreaterThanOrEqual -50
+            response.description.shouldNotBeBlank()
+            response.humidity shouldBeGreaterThanOrEqual 0
         }
     }
 
@@ -696,8 +694,7 @@ object TestUtils {
 
     fun assertExceptionMessageContains(ex: Throwable, vararg substrings: String) {
         val msg = ex.message ?: ""
-        val matches = substrings.any { needle -> msg.contains(needle, ignoreCase = true) }
-        assertTrue(matches, "Exception message doesn't contain expected error: ${ex.message}")
+        substrings.any { needle -> msg.contains(needle, ignoreCase = true) }.shouldBeTrue()
     }
 
     fun isValidJson(str: String): Boolean = try {
