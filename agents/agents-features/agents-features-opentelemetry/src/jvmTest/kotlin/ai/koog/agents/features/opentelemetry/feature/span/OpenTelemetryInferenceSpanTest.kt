@@ -15,14 +15,9 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
 
     @Test
     fun `test inference spans are collected`() = runTest {
-        val chatAttribute = SpanAttributes.Operation.Name(OperationNameType.CHAT)
-        val attributeKey = AttributeKey.stringKey(chatAttribute.key)
+        val collectedTestData = runAgentWithSingleLLMCallStrategy()
 
-        val collectedTestData = runAgentWithSingleLLMCallStrategy(
-            filter = { spanData -> spanData.attributes.get(attributeKey) == chatAttribute.value }
-        )
-
-        val runId = collectedTestData.runId
+        val runId = collectedTestData.lastRunId
         val model = collectedTestData.model
         val temperature = collectedTestData.temperature
         val userPrompt = collectedTestData.userPrompt
@@ -31,6 +26,11 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
         val collectedSpans = collectedTestData.collectedSpans
 
         assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
+
+        val chatAttribute = SpanAttributes.Operation.Name(OperationNameType.CHAT)
+        val attributeKey = AttributeKey.stringKey(chatAttribute.key)
+
+        val actualSpans = collectedSpans.filter { spanData -> spanData.attributes.get(attributeKey) == chatAttribute.value }
 
         val expectedSpans = listOf(
             mapOf(
@@ -72,6 +72,6 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
             ),
         )
 
-        assertSpans(expectedSpans, collectedSpans)
+        assertSpans(expectedSpans, actualSpans)
     }
 }

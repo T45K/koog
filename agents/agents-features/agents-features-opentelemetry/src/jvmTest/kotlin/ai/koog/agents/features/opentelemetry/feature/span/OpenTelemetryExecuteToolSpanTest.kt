@@ -16,14 +16,7 @@ class OpenTelemetryExecuteToolSpanTest : OpenTelemetryTestBase() {
 
     @Test
     fun `test execute tool spans are collected`() = runTest {
-        val executeToolAttribute = SpanAttributes.Operation.Name(OperationNameType.EXECUTE_TOOL)
-        val attributeKey = AttributeKey.stringKey(executeToolAttribute.key)
-
-        val collectedTestData = runAgentWithSingleToolCallStrategy(
-            filter = { spanData ->
-                spanData.attributes.get(attributeKey) == executeToolAttribute.value
-            }
-        )
+        val collectedTestData = runAgentWithSingleToolCallStrategy()
 
         val toolCallId = collectedTestData.toolCallId
         val toolCallArg = collectedTestData.toolCallArg
@@ -31,6 +24,13 @@ class OpenTelemetryExecuteToolSpanTest : OpenTelemetryTestBase() {
 
         assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
         assertNotNull(toolCallArg, "Tool call arg should not be null")
+
+        val executeToolAttribute = SpanAttributes.Operation.Name(OperationNameType.EXECUTE_TOOL)
+        val attributeKey = AttributeKey.stringKey(executeToolAttribute.key)
+
+        val actualSpans = collectedSpans.filter { spanData ->
+            spanData.attributes.get(attributeKey) == executeToolAttribute.value
+        }
 
         val serializedArgs = TestGetWeatherTool.encodeArgsToString(TestGetWeatherTool.Args(toolCallArg))
 
@@ -50,6 +50,6 @@ class OpenTelemetryExecuteToolSpanTest : OpenTelemetryTestBase() {
             ),
         )
 
-        assertSpans(expectedSpans, collectedSpans)
+        assertSpans(expectedSpans, actualSpans)
     }
 }

@@ -7,7 +7,7 @@ internal data class NodeInfo(val nodeName: String, val nodeId: String)
 
 internal data class OpenTelemetryTestData(
     var agentId: String? = null,
-    var runId: String? = null,
+    var runIds: List<String> = emptyList(),
     var model: LLModel? = null,
     var temperature: Double? = null,
     var userPrompt: String? = null,
@@ -15,24 +15,13 @@ internal data class OpenTelemetryTestData(
     var toolCallId: String? = null,
     var toolCallArg: String? = null,
     var result: String? = null,
-    val collectedSpans: List<SpanData> = emptyList(),
-    val collectedNodeIds: List<NodeInfo> = emptyList(),
+    var collectedSpans: List<SpanData> = emptyList(),
+    var collectedNodeIds: List<NodeInfo> = emptyList(),
 ) {
+    val lastRunId: String
+        get() = runIds.last()
+
     fun singleNodeInfoByName(nodeName: String): NodeInfo = collectedNodeIds.single { it.nodeName == nodeName }
 
     fun singleNodeIdByName(nodeName: String): String = singleNodeInfoByName(nodeName).nodeId
-
-    fun merge(other: OpenTelemetryTestData): OpenTelemetryTestData = OpenTelemetryTestData(
-        this.agentId ?: other.agentId,
-        this.runId ?: other.runId,
-        this.model ?: other.model,
-        this.temperature ?: other.temperature,
-        this.userPrompt ?: other.userPrompt,
-        this.systemPrompt ?: other.systemPrompt,
-        this.toolCallId ?: other.toolCallId,
-        this.toolCallArg ?: other.toolCallArg,
-        this.result ?: other.result,
-        this.collectedSpans + other.collectedSpans,
-        this.collectedNodeIds + other.collectedNodeIds,
-    )
 }

@@ -15,24 +15,23 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
     @Test
     fun `test create and invoke agent spans are collected`() = runTest {
 
-        val createAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.CREATE_AGENT)
-        val invokeAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.INVOKE_AGENT)
-
-        val attributeKey = AttributeKey.stringKey(createAgentAttribute.key)
-
-        val collectedTestData = runAgentWithSingleLLMCallStrategy(
-            filter = { spanData ->
-                spanData.attributes.get(attributeKey) == createAgentAttribute.value ||
-                    spanData.attributes.get(attributeKey) == invokeAgentAttribute.value
-            }
-        )
+        val collectedTestData = runAgentWithSingleLLMCallStrategy()
 
         val agentId = collectedTestData.agentId
-        val runId = collectedTestData.runId
+        val runId = collectedTestData.lastRunId
         val model = collectedTestData.model
         val collectedSpans = collectedTestData.collectedSpans
 
         assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
+
+        val createAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.CREATE_AGENT)
+        val invokeAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.INVOKE_AGENT)
+        val attributeKey = AttributeKey.stringKey(createAgentAttribute.key)
+
+        val actualSpans = collectedSpans.filter { spanData ->
+            spanData.attributes.get(attributeKey) == createAgentAttribute.value ||
+                spanData.attributes.get(attributeKey) == invokeAgentAttribute.value
+        }
 
         val expectedSpans = listOf(
             mapOf(
@@ -60,6 +59,6 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
             )
         )
 
-        assertSpans(expectedSpans, collectedSpans)
+        assertSpans(expectedSpans, actualSpans)
     }
 }

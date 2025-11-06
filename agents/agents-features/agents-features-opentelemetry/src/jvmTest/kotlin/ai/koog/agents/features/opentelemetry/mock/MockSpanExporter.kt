@@ -10,17 +10,17 @@ import io.opentelemetry.sdk.trace.export.SpanExporter
  *
  * @param filter a function that determines whether a given span should be exported. Defaults to exporting all spans.
  */
-internal class MockSpanExporter(val filter: (SpanData) -> Boolean = { true }) : SpanExporter {
+internal class MockSpanExporter : SpanExporter {
 
     private val _collectedSpans = mutableListOf<SpanData>()
 
     val collectedSpans: List<SpanData>
-        get() = _collectedSpans.filter(filter)
+        get() = _collectedSpans
 
     private val _runIds = mutableListOf<String>()
 
     val runIds: List<String>
-        get() = _runIds.toList()
+        get() = _runIds
 
     val lastRunId: String
         get() = _runIds.last()

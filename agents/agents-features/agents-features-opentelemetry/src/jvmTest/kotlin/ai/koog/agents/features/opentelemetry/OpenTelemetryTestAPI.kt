@@ -26,10 +26,8 @@ import ai.koog.prompt.executor.model.PromptExecutor
 import ai.koog.prompt.llm.LLModel
 import ai.koog.prompt.params.LLMParams
 import ai.koog.utils.io.use
-import io.opentelemetry.sdk.trace.data.SpanData
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import kotlin.io.use
 
 internal object OpenTelemetryTestAPI {
 
@@ -39,9 +37,7 @@ internal object OpenTelemetryTestAPI {
 
     //region Run Agents With Strategies
 
-    internal suspend fun runAgentWithSingleLLMCallStrategy(
-        filter: (SpanData) -> Boolean = { true },
-    ): OpenTelemetryTestData {
+    internal suspend fun runAgentWithSingleLLMCallStrategy(): OpenTelemetryTestData {
 
         val strategy = strategy("test-single-llm-strategy") {
             val nodeSendInput by nodeLLMRequest("test-llm-call")
@@ -63,14 +59,11 @@ internal object OpenTelemetryTestAPI {
             strategy = strategy,
             userPrompt = userPrompt,
             executor = executor,
-            filter = filter,
             collectedTestData = collectedTestData
         )
     }
 
-    internal suspend fun runAgentWithSingleToolCallStrategy(
-        filter: (SpanData) -> Boolean = { true },
-    ): OpenTelemetryTestData {
+    internal suspend fun runAgentWithSingleToolCallStrategy(): OpenTelemetryTestData {
 
         val strategy = strategy("test-tool-calls-strategy") {
             val nodeSendInput by nodeLLMRequest("test-llm-call")
@@ -116,7 +109,6 @@ internal object OpenTelemetryTestAPI {
             userPrompt = userPrompt,
             executor = executor,
             toolRegistry = toolRegistry,
-            filter = filter,
             collectedTestData = collectedTestData
         )
     }
@@ -126,7 +118,6 @@ internal object OpenTelemetryTestAPI {
         toolArgsLocation: String,
         llmResponse: String,
         executor: PromptExecutor? = null,
-        filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
 
         val strategy = strategy("test-tool-calls-strategy") {
@@ -162,36 +153,12 @@ internal object OpenTelemetryTestAPI {
             userPrompt = userPrompt,
             executor = executor,
             toolRegistry = toolRegistry,
-            filter = filter,
-        )
-    }
-
-    internal suspend fun runAgentWithErrorStrategy(
-        userPrompt: String? = null,
-        executor: PromptExecutor? = null,
-        filter: (SpanData) -> Boolean = { true },
-    ): OpenTelemetryTestData {
-        val strategy = strategy("test-error-strategy") {
-            val nodeWithError by node<String, String>("node-with-error") {
-                throw IllegalStateException("Test error")
-            }
-
-            edge(nodeStart forwardTo nodeWithError)
-            edge(nodeWithError forwardTo nodeFinish)
-        }
-
-        return runAgentWithStrategy(
-            strategy = strategy,
-            userPrompt = userPrompt,
-            executor = executor,
-            filter = filter,
         )
     }
 
     internal suspend fun runAgentWithParallelToolCallStrategy(
         userPrompt: String? = null,
         executor: PromptExecutor? = null,
-        filter: (SpanData) -> Boolean = { true },
     ): OpenTelemetryTestData {
         val strategy = strategy("test-parallel-strategy") {
             val nodeFirstJoke by node<String, String> { topic ->
@@ -226,7 +193,6 @@ internal object OpenTelemetryTestAPI {
             strategy = strategy,
             userPrompt = userPrompt,
             executor = executor,
-            filter = filter,
         )
     }
 
@@ -235,8 +201,7 @@ internal object OpenTelemetryTestAPI {
         userPrompt: String? = null,
         executor: PromptExecutor? = null,
         toolRegistry: ToolRegistry? = null,
-        filter: (SpanData) -> Boolean = { true },
-        collectedTestData: OpenTelemetryTestData? = null
+        collectedTestData: OpenTelemetryTestData = OpenTelemetryTestData()
     ): OpenTelemetryTestData {
 
         val systemPrompt = "You are the application that predicts weather"
@@ -247,10 +212,19 @@ internal object OpenTelemetryTestAPI {
         val model = OpenAIModels.Chat.GPT4o
         val temperature = 0.4
 
-        var nodesInfo: List<NodeInfo> = emptyList()
+        val collectedTestData = collectedTestData.apply {
+            this.agentId      = this.agentId ?: agentId
+            this.systemPrompt = this.systemPrompt ?: systemPrompt
+            this.userPrompt   = this.userPrompt ?: userPrompt
+            this.model        = this.model ?: model
+            this.temperature  = this.temperature ?: temperature
+        }
 
-        return MockSpanExporter(filter).use { mockExporter ->
-            createAgent(
+        return MockSpanExporter().use { mockExporter ->
+            collectedTestData.collectedSpans = mockExporter.collectedSpans
+            collectedTestData.runIds = mockExporter.runIds
+
+            val agentResult = createAgent(
                 agentId = agentId,
                 strategy = strategy,
                 executor = executor,
@@ -265,23 +239,13 @@ internal object OpenTelemetryTestAPI {
                     setVerbose(true)
                 }
 
-                installNodeIdsCollector().also { nodesInfo = it }
+                installNodeIdsCollector().also { collectedTestData.collectedNodeIds = it }
             }.use { agent ->
                 agent.run(userPrompt)
             }
 
-            (collectedTestData ?: OpenTelemetryTestData()).merge(
-                OpenTelemetryTestData(
-                    agentId = agentId,
-                    runId = mockExporter.lastRunId,
-                    model = model,
-                    temperature = temperature,
-                    userPrompt = userPrompt,
-                    systemPrompt = systemPrompt,
-                    collectedSpans = mockExporter.collectedSpans,
-                    collectedNodeIds = nodesInfo
-                )
-            )
+            collectedTestData.result = agentResult
+            collectedTestData
         }
     }
 

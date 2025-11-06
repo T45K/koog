@@ -23,18 +23,17 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
 
     @Test
     fun `test node execute spans are collected`() = runTest {
-        val attributeKey = AttributeKey.stringKey("koog.node.name")
+        val collectedTestData = runAgentWithSingleLLMCallStrategy()
 
-        val collectedTestData = runAgentWithSingleLLMCallStrategy(
-            filter = { spanData -> spanData.attributes.get(attributeKey) != null }
-        )
-
-        val runId = collectedTestData.runId
+        val runId = collectedTestData.lastRunId
         val userPrompt = collectedTestData.userPrompt
         val result = collectedTestData.result
         val collectedSpans = collectedTestData.collectedSpans
 
         assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
+
+        val attributeKey = AttributeKey.stringKey("koog.node.name")
+        val actualSpans = collectedSpans.filter { spanData -> spanData.attributes.get(attributeKey) != null }
 
         @OptIn(InternalAgentsApi::class)
         val serializedAssistantResponse = SerializationUtils.encodeDataToStringOrDefault(
@@ -83,7 +82,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
             )
         )
 
-        assertSpans(expectedSpans, collectedSpans)
+        assertSpans(expectedSpans, actualSpans)
     }
 
     @Test
@@ -100,13 +99,19 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
         }
 
         val collectedTestData = OpenTelemetryTestData()
+
         val throwable = assertFails {
             runAgentWithStrategy(strategy = strategy, collectedTestData = collectedTestData)
         }
 
-        val runId = collectedTestData.runId
+        val runId = collectedTestData.lastRunId
         val userPrompt = collectedTestData.userPrompt
         val collectedSpans = collectedTestData.collectedSpans
+
+        assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
+
+        val attributeKey = AttributeKey.stringKey("koog.node.name")
+        val actualSpans = collectedSpans.filter { spanData -> spanData.attributes.get(attributeKey) != null }
 
         assertEquals(testErrorMessage, throwable.message)
 
@@ -115,7 +120,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
                 "node.$nodeWithErrorName.${collectedTestData.singleNodeIdByName(nodeWithErrorName)}" to mapOf(
                     "attributes" to mapOf(
                         "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to "\"$nodeWithErrorName\"",
+                        "koog.node.name" to nodeWithErrorName,
                         "koog.node.input" to "\"$userPrompt\"",
                     ),
                     "events" to emptyMap()
@@ -135,6 +140,6 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
             )
         )
 
-        assertSpans(expectedSpans, collectedSpans)
+        assertSpans(expectedSpans, actualSpans)
     }
 }
