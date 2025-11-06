@@ -2,11 +2,9 @@ package ai.koog.agents.features.opentelemetry.feature.span
 
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleToolCallStrategy
-import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Operation.OperationNameType
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.agents.features.opentelemetry.mock.TestGetWeatherTool
-import io.opentelemetry.api.common.AttributeKey
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -19,18 +17,12 @@ class OpenTelemetryExecuteToolSpanTest : OpenTelemetryTestBase() {
         val collectedTestData = runAgentWithSingleToolCallStrategy()
 
         val toolCallId = collectedTestData.toolCallId
+
+        val actualSpans = collectedTestData.filterExecuteToolSpans()
+        assertTrue(actualSpans.isNotEmpty(), "Spans should be created during agent execution")
+
         val toolCallArg = collectedTestData.toolCallArg
-        val collectedSpans = collectedTestData.collectedSpans
-
-        assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
         assertNotNull(toolCallArg, "Tool call arg should not be null")
-
-        val executeToolAttribute = SpanAttributes.Operation.Name(OperationNameType.EXECUTE_TOOL)
-        val attributeKey = AttributeKey.stringKey(executeToolAttribute.key)
-
-        val actualSpans = collectedSpans.filter { spanData ->
-            spanData.attributes.get(attributeKey) == executeToolAttribute.value
-        }
 
         val serializedArgs = TestGetWeatherTool.encodeArgsToString(TestGetWeatherTool.Args(toolCallArg))
 

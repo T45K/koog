@@ -2,15 +2,13 @@ package ai.koog.agents.features.opentelemetry.feature.span
 
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleLLMCallStrategy
-import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Operation.OperationNameType
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
-import io.opentelemetry.api.common.AttributeKey
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
+class OpenTelemetryAgentSpanTest : OpenTelemetryTestBase() {
 
     @Test
     fun `test create and invoke agent spans are collected`() = runTest {
@@ -20,18 +18,9 @@ class OpenTelemetryCreateAgentSpanTest : OpenTelemetryTestBase() {
         val agentId = collectedTestData.agentId
         val runId = collectedTestData.lastRunId
         val model = collectedTestData.model
-        val collectedSpans = collectedTestData.collectedSpans
 
-        assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
-
-        val createAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.CREATE_AGENT)
-        val invokeAgentAttribute = SpanAttributes.Operation.Name(OperationNameType.INVOKE_AGENT)
-        val attributeKey = AttributeKey.stringKey(createAgentAttribute.key)
-
-        val actualSpans = collectedSpans.filter { spanData ->
-            spanData.attributes.get(attributeKey) == createAgentAttribute.value ||
-                spanData.attributes.get(attributeKey) == invokeAgentAttribute.value
-        }
+        val actualSpans = collectedTestData.filterCreateAgentSpans() + collectedTestData.filterAgentInvokeSpans()
+        assertTrue(actualSpans.isNotEmpty(), "Spans should be created during agent execution")
 
         val expectedSpans = listOf(
             mapOf(

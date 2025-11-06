@@ -4,6 +4,7 @@ import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.dsl.builder.strategy
 import ai.koog.agents.core.utils.SerializationUtils
 import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.USER_PROMPT_PARIS
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleLLMCallStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
@@ -11,7 +12,6 @@ import ai.koog.agents.features.opentelemetry.OpenTelemetryTestData
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.prompt.message.Message
 import ai.koog.prompt.message.ResponseMetaInfo
-import io.opentelemetry.api.common.AttributeKey
 import kotlinx.coroutines.test.runTest
 import kotlin.reflect.typeOf
 import kotlin.test.Test
@@ -26,14 +26,10 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
         val collectedTestData = runAgentWithSingleLLMCallStrategy()
 
         val runId = collectedTestData.lastRunId
-        val userPrompt = collectedTestData.userPrompt
         val result = collectedTestData.result
-        val collectedSpans = collectedTestData.collectedSpans
 
-        assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
-
-        val attributeKey = AttributeKey.stringKey("koog.node.name")
-        val actualSpans = collectedSpans.filter { spanData -> spanData.attributes.get(attributeKey) != null }
+        val actualSpans = collectedTestData.filterNodeExecutionSpans()
+        assertTrue(actualSpans.isNotEmpty(), "Spans should be created during agent execution")
 
         @OptIn(InternalAgentsApi::class)
         val serializedAssistantResponse = SerializationUtils.encodeDataToStringOrDefault(
@@ -63,7 +59,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
                     "attributes" to mapOf(
                         "gen_ai.conversation.id" to runId,
                         "koog.node.name" to "test-llm-call",
-                        "koog.node.input" to "\"$userPrompt\"",
+                        "koog.node.input" to "\"$USER_PROMPT_PARIS\"",
                         "koog.node.output" to serializedAssistantResponse
                     ),
                     "events" to emptyMap()
@@ -74,8 +70,8 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
                     "attributes" to mapOf(
                         "gen_ai.conversation.id" to runId,
                         "koog.node.name" to "__start__",
-                        "koog.node.input" to "\"$userPrompt\"",
-                        "koog.node.output" to "\"$userPrompt\"",
+                        "koog.node.input" to "\"$USER_PROMPT_PARIS\"",
+                        "koog.node.output" to "\"$USER_PROMPT_PARIS\"",
                     ),
                     "events" to emptyMap()
                 )
@@ -105,13 +101,8 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
         }
 
         val runId = collectedTestData.lastRunId
-        val userPrompt = collectedTestData.userPrompt
-        val collectedSpans = collectedTestData.collectedSpans
-
-        assertTrue(collectedSpans.isNotEmpty(), "Spans should be created during agent execution")
-
-        val attributeKey = AttributeKey.stringKey("koog.node.name")
-        val actualSpans = collectedSpans.filter { spanData -> spanData.attributes.get(attributeKey) != null }
+        val actualSpans = collectedTestData.filterNodeExecutionSpans()
+        assertTrue(actualSpans.isNotEmpty(), "Spans should be created during agent execution")
 
         assertEquals(testErrorMessage, throwable.message)
 
@@ -121,7 +112,7 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
                     "attributes" to mapOf(
                         "gen_ai.conversation.id" to runId,
                         "koog.node.name" to nodeWithErrorName,
-                        "koog.node.input" to "\"$userPrompt\"",
+                        "koog.node.input" to "\"$USER_PROMPT_PARIS\"",
                     ),
                     "events" to emptyMap()
                 )
@@ -132,8 +123,8 @@ class OpenTelemetryNodeExecuteSpanTest : OpenTelemetryTestBase() {
                     "attributes" to mapOf(
                         "gen_ai.conversation.id" to runId,
                         "koog.node.name" to "__start__",
-                        "koog.node.input" to "\"$userPrompt\"",
-                        "koog.node.output" to "\"$userPrompt\"",
+                        "koog.node.input" to "\"$USER_PROMPT_PARIS\"",
+                        "koog.node.output" to "\"$USER_PROMPT_PARIS\"",
                     ),
                     "events" to emptyMap()
                 )

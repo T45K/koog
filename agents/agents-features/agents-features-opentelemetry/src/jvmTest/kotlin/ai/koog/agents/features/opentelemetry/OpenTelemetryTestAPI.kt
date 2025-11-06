@@ -16,6 +16,10 @@ import ai.koog.agents.core.dsl.extension.onAssistantMessage
 import ai.koog.agents.core.dsl.extension.onToolCall
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.features.eventHandler.feature.EventHandler
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.TEMPERATURE
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.MOCK_LLM_RESPONSE_PARIS
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.SYSTEM_PROMPT
+import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.USER_PROMPT_PARIS
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetry
 import ai.koog.agents.features.opentelemetry.mock.MockSpanExporter
 import ai.koog.agents.features.opentelemetry.mock.TestGetWeatherTool
@@ -35,8 +39,21 @@ internal object OpenTelemetryTestAPI {
         override fun now(): Instant = Instant.parse("2023-01-01T00:00:00Z")
     }
 
-    //region Run Agents With Strategies
+    internal object Parameter {
+        internal const val SYSTEM_PROMPT = "You are the application that predicts weather"
 
+        internal const val USER_PROMPT_PARIS = "What's the weather in Paris?"
+        internal const val USER_PROMPT_LONDON = "What's the weather in London?"
+
+        internal const val MOCK_LLM_RESPONSE_PARIS = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
+        internal const val MOCK_LLM_RESPONSE_LONDON = "The weather in London is sunny, with temperatures around 65°F"
+
+        internal const val TEMPERATURE: Double = 0.4
+    }
+
+    //region Agents With Strategies
+
+    // LLM Call
     internal suspend fun runAgentWithSingleLLMCallStrategy(): OpenTelemetryTestData {
 
         val strategy = strategy("test-single-llm-strategy") {
@@ -46,23 +63,23 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendInput forwardTo nodeFinish onAssistantMessage { true })
         }
 
-        val userPrompt = "What's the weather in Paris?"
-        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
-
         val executor = getMockExecutor(clock = testClock) {
-            mockLLMAnswer(llmResult) onRequestEquals userPrompt
+            mockLLMAnswer(MOCK_LLM_RESPONSE_PARIS) onRequestEquals USER_PROMPT_PARIS
         }
 
-        val collectedTestData = OpenTelemetryTestData(userPrompt = userPrompt, result = llmResult)
+        val collectedTestData = OpenTelemetryTestData(
+            result = MOCK_LLM_RESPONSE_PARIS
+        )
 
         return runAgentWithStrategy(
             strategy = strategy,
-            userPrompt = userPrompt,
+            userPrompt = USER_PROMPT_PARIS,
             executor = executor,
             collectedTestData = collectedTestData
         )
     }
 
+    // Tool Call
     internal suspend fun runAgentWithSingleToolCallStrategy(): OpenTelemetryTestData {
 
         val strategy = strategy("test-tool-calls-strategy") {
@@ -78,9 +95,6 @@ internal object OpenTelemetryTestAPI {
             edge(nodeSendToolResult forwardTo nodeExecuteTool onToolCall { true })
         }
 
-        val userPrompt = "What's the weather in Paris?"
-        val llmResult = "The weather in Paris is rainy and overcast, with temperatures around 57°F"
-
         val toolRegistry = ToolRegistry.Companion {
             tool(TestGetWeatherTool)
         }
@@ -93,26 +107,25 @@ internal object OpenTelemetryTestAPI {
                 tool = TestGetWeatherTool,
                 args = TestGetWeatherTool.Args(toolCallArg),
                 toolCallId = toolCallId
-            ) onRequestEquals userPrompt
-            mockLLMAnswer(llmResult) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
+            ) onRequestEquals USER_PROMPT_PARIS
+            mockLLMAnswer(MOCK_LLM_RESPONSE_PARIS) onRequestContains TestGetWeatherTool.DEFAULT_PARIS_RESULT
         }
 
         val collectedTestData = OpenTelemetryTestData(
-            userPrompt = userPrompt,
-            result = llmResult,
+            result = MOCK_LLM_RESPONSE_PARIS,
             toolCallId = toolCallId,
             toolCallArg = toolCallArg,
         )
 
         return runAgentWithStrategy(
             strategy = strategy,
-            userPrompt = userPrompt,
             executor = executor,
             toolRegistry = toolRegistry,
             collectedTestData = collectedTestData
         )
     }
 
+    // Tool Call - ?
     internal suspend fun runAgentWithToolCallStrategy(
         userPrompt: String,
         toolArgsLocation: String,
@@ -156,10 +169,13 @@ internal object OpenTelemetryTestAPI {
         )
     }
 
+    // Tool Call - Parallel
     internal suspend fun runAgentWithParallelToolCallStrategy(
         userPrompt: String? = null,
         executor: PromptExecutor? = null,
     ): OpenTelemetryTestData {
+        val userPrompt = userPrompt ?: "What's the weather in Paris?"
+
         val strategy = strategy("test-parallel-strategy") {
             val nodeFirstJoke by node<String, String> { topic ->
                 "First joke about $topic: Why do programmers prefer dark mode? Because light attracts bugs!"
@@ -204,20 +220,13 @@ internal object OpenTelemetryTestAPI {
         collectedTestData: OpenTelemetryTestData = OpenTelemetryTestData()
     ): OpenTelemetryTestData {
 
-        val systemPrompt = "You are the application that predicts weather"
-        val userPrompt = userPrompt ?: "What's the weather in Paris?"
-
         val agentId = "test-agent-id"
         val promptId = "test-prompt-id"
         val model = OpenAIModels.Chat.GPT4o
-        val temperature = 0.4
 
         val collectedTestData = collectedTestData.apply {
             this.agentId      = this.agentId ?: agentId
-            this.systemPrompt = this.systemPrompt ?: systemPrompt
-            this.userPrompt   = this.userPrompt ?: userPrompt
             this.model        = this.model ?: model
-            this.temperature  = this.temperature ?: temperature
         }
 
         return MockSpanExporter().use { mockExporter ->
@@ -230,9 +239,9 @@ internal object OpenTelemetryTestAPI {
                 executor = executor,
                 promptId = promptId,
                 toolRegistry = toolRegistry,
-                systemPrompt = systemPrompt,
+                systemPrompt = SYSTEM_PROMPT,
                 model = model,
-                temperature = temperature
+                temperature = TEMPERATURE,
             ) {
                 install(OpenTelemetry) {
                     addSpanExporter(mockExporter)
@@ -241,7 +250,7 @@ internal object OpenTelemetryTestAPI {
 
                 installNodeIdsCollector().also { collectedTestData.collectedNodeIds = it }
             }.use { agent ->
-                agent.run(userPrompt)
+                agent.run(userPrompt ?: USER_PROMPT_PARIS)
             }
 
             collectedTestData.result = agentResult
@@ -249,7 +258,7 @@ internal object OpenTelemetryTestAPI {
         }
     }
 
-    //endregion Run Agents With Strategies
+    //endregion Agents With Strategies
 
     //region Agents
 
@@ -333,6 +342,12 @@ internal object OpenTelemetryTestAPI {
             onNodeExecutionStarting { eventContext ->
                 getNodeInfoElement()?.id?.let { nodeId ->
                     nodesInfo.add(NodeInfo(nodeName = eventContext.node.name, nodeId = nodeId))
+                }
+            }
+
+            onSubgraphExecutionStarting { eventContext ->
+                getNodeInfoElement()?.id?.let { nodeId ->
+                    nodesInfo.add(NodeInfo(nodeName = eventContext.subgraph.name, nodeId = nodeId))
                 }
             }
         }

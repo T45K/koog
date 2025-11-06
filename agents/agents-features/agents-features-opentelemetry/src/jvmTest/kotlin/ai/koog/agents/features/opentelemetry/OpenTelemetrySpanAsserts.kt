@@ -179,7 +179,7 @@ internal object OpenTelemetrySpanAsserts {
                     assertEquals(
                         expectedArgValue,
                         actualArgValue,
-                        "Attribute values should be the same for the span (name: $spanName)\n" +
+                        "Attribute values should be the same (span: $spanName, attribute key: $actualArgName)\n" +
                             "Expected: <$expectedArgValue>,\n" +
                             "Actual: <$actualArgValue>"
                     )
