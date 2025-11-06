@@ -793,6 +793,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
         }
     }
 
+
     @Test
     fun `test spans are created for agent with parallel nodes execution`() = runTest {
         MockSpanExporter().use { mockExporter ->
@@ -1026,7 +1027,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
     //endregion Invoke Agent Span
 
     //region Node Execute Span
-    //
+    // + single llm
     //endregion Node Execute Span
 
     //region Subgraph Execute Span
@@ -1034,7 +1035,7 @@ class OpenTelemetrySpanTest : OpenTelemetryTestBase() {
     //endregion Subgraph Execute Span
 
     //region Execute Tool Span
-    //
+    // + single tool
     //endregion Execute Tool Span
 
     //region Inference Span
